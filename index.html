@@ -220,6 +220,21 @@ function CreateTorrent()
         return;
     }
     
+    if (torrentName.match(/[<>:\"\\\/\|\?\*]/))
+    {
+        errorTextDiv.innerHTML = "Torrent name cannot contain any of the following characters: < > : \\ / | ? *";
+        errorTextDiv.style.display = "block";
+        return;
+    }
+    
+    if (torrentName.length > 255)
+    {
+        errorTextDiv.innerHTML = "Torrent name cannot be longer than 255 characters";
+        errorTextDiv.style.display = "block";
+        return;
+    }
+        
+    
     var torrentObject = {};
     var trackers = document.getElementById("torrent_trackers").value.split("\n");
     var okTrackers = [];
