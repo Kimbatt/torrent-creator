@@ -6,7 +6,7 @@
 <meta name="description" content="Create torrent files directly in your web browser.">
 <meta name="keywords" content="torrent,torrent file">
 <title>Online Torrent Creator</title>
-<link rel="icon" href="favicon.ico">
+<link rel="icon" href="favicon.png">
 
 <style>
 
@@ -113,11 +113,12 @@ label
 <div style="display: flex; flex-wrap: wrap;">
     <label style="display: inline; margin-left: 30px; font-size: 22px; border-right: 100px solid transparent;">Piece size:
     <select id="torrent_block_size" style="width: 200px; margin-left: 20px; margin-bottom: 20px; display: inline; flex-width: 200px;">
+        <option value="0">Automatic</option>
         <option value="16384">16 kB</option>
         <option value="32768">32 kB</option>
         <option value="65536">64 kB</option>
         <option value="131072">128 kB</option>
-        <option value="262144" selected>256 kB</option>
+        <option value="262144">256 kB</option>
         <option value="524288">512 kB</option>
         <option value="1048576">1 MB</option>
         <option value="2097152">2 MB</option>
@@ -171,13 +172,14 @@ function GetSizeStr(size)
 
 var allFiles;
 var singleFile;
+var totalSize;
 function FolderSelected(files)
 {
     var folderName = files[0].webkitRelativePath.split("/")[0];
     document.getElementById("torrent_name").value = folderName;
     
     allFiles = [];
-    var totalSize = 0;
+    totalSize = 0;
     for (var i = 0; i < files.length; ++i)
     {
         allFiles.push(files[i]);
@@ -192,8 +194,9 @@ function FileSelected(files)
 {
     singleFile = files[0];
     var fileName = singleFile.name;
+    totalSize = singleFile.size;
     document.getElementById("torrent_name").value = fileName;
-    document.getElementById("selected_file_info").innerHTML = "Selected file: " + fileName + " (" + GetSizeStr(singleFile.size) + ")";
+    document.getElementById("selected_file_info").innerHTML = "Selected file: " + fileName + " (" + GetSizeStr(totalSize) + ")";
     allFiles = undefined;
     document.getElementById("create_torrent_button").disabled = false;
 }
@@ -262,6 +265,18 @@ function CreateTorrent()
     infoObject["name"] = torrentName;
     var blockSizeComboBox = document.getElementById("torrent_block_size");
     blockSize = +blockSizeComboBox.options[blockSizeComboBox.selectedIndex].value;
+    if (blockSize == 0)
+    {
+        var factor = Math.round(Math.log2(totalSize / 1200));
+        
+        if (factor < 14)
+            factor = 14;
+        else if (factor > 24)
+            factor = 24;
+        
+        blockSize = 1 << factor;
+    }
+    
     infoObject["piece length"] = blockSize;
     
     torrentObject["info"] = infoObject;
