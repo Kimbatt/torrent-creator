@@ -137,6 +137,8 @@ label
 <br />
 <input type="text" id="torrent_comment" style="width: calc(100% - 60px); font-size: 22px; padding: 5px; margin-left: 20px; margin-bottom: 20px;" placeholder="Comment (optional)"></input>
 <br />
+<input type="text" id="torrent_source" style="width: calc(100% - 60px); font-size: 22px; padding: 5px; margin-left: 20px; margin-bottom: 20px;" placeholder="Source (optional)"></input>
+<br />
 
 <div id="error_text" style="display: none; font-size: 25px; color: #ff3d58; margin-left: 20px; margin-bottom: 20px;"></div>
 
@@ -268,6 +270,10 @@ function CreateTorrent()
     if (comment != "")
         torrentObject["comment"] = comment;
     
+    var source = document.getElementById("torrent_source").value;
+    if (source != "")
+        torrentObject["source"] = source;
+    
     if (document.getElementById("torrent_creation_date").checked)
         torrentObject["creation date"] = (Date.now() / 1000) | 0;
     
@@ -359,6 +365,7 @@ function DisableElements(disable)
     document.getElementById("torrent_creation_date").disabled = disable;
     document.getElementById("torrent_trackers").disabled = disable;
     document.getElementById("torrent_comment").disabled = disable;
+    document.getElementById("torrent_source").disabled = disable;
 }
 
 function CreateFromFile(obj)

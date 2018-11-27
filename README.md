@@ -10,6 +10,7 @@ Select a file or a folder, then set the parameters:
 * Set creation date: Adds the current date and time to the torrent file.
 * Trackers: List of trackers (can be edited later, from the torrent client). Can be empty.
 * Comment: Arbitrary text, comment for the torrent file. Can be empty.
+* Source: Arbitrary text. Setting the source of a torrent can be used to produce a different info hash. Can be empty.
 
 Click on the Create torrent button to create the torrent file. Everything is done locally, on your computer.  
 After it has completed, the torrent file will be downloaded automatically.
