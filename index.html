@@ -270,10 +270,6 @@ function CreateTorrent()
     if (comment != "")
         torrentObject["comment"] = comment;
     
-    var source = document.getElementById("torrent_source").value;
-    if (source != "")
-        torrentObject["source"] = source;
-    
     if (document.getElementById("torrent_creation_date").checked)
         torrentObject["creation date"] = (Date.now() / 1000) | 0;
     
@@ -299,6 +295,10 @@ function CreateTorrent()
     }
     
     infoObject["piece length"] = blockSize;
+    
+    var source = document.getElementById("torrent_source").value;
+    if (source != "")
+        infoObject["source"] = source;
     
     torrentObject["info"] = infoObject;
     
