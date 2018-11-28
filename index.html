@@ -143,8 +143,8 @@ label
 <div id="error_text" style="display: none; font-size: 25px; color: #ff3d58; margin-left: 20px; margin-bottom: 20px;"></div>
 
 <div id="progressbar_container" class="progress-bar-hidden" style="margin-left: 20px; border: 2px solid #bcbcbc; border-radius: 5px; width: calc(100% - 50px); position: relative;">
-    <div id="progressbar" style="background: #23b235; width: 10%; height: 100%; border-radius: 3px;"></div>
-    <div id="progressbar_text" style="display:block; position: absolute; bottom: 4px; font-size: 25px; padding-bottom: 2px; padding-left: 6px; text-shadow: 2px 2px 5px blue;">asd</div>
+    <div id="progressbar" style="background: #23b235; width: 0%; height: 100%; border-radius: 3px;"></div>
+    <div id="progressbar_text" style="display:block; position: absolute; bottom: 4px; font-size: 25px; padding-bottom: 2px; padding-left: 6px; text-shadow: 2px 2px 5px blue;"></div>
 </div>
 
 <button id="create_torrent_button" style="display: grid; margin-top: 20px; width: calc(100% - 46px); max-width: 600px; height: 100px; font-size: 50px;" onclick="CreateTorrent()" disabled>Create torrent</button>
@@ -344,6 +344,7 @@ function Failed(filename)
     errorTextDiv.innerHTML = filename ? ("Failed to read file: " + filename.name) : "Error reading file";
     errorTextDiv.style.display = "block";
     document.getElementById("progressbar").style.display = "none";
+    document.getElementById("progressbar").style.width = "0%";
     
     Finalize();
 }
@@ -351,9 +352,10 @@ function Failed(filename)
 function Finalize()
 {
     creationInProgress = false;
-    document.getElementById("create_torrent_button").innerHTML = "Create torrent file";
+    document.getElementById("create_torrent_button").innerHTML = "Create torrent";
     document.getElementById("progressbar_container").className = "progress-bar-hidden";
     document.getElementById("progressbar_text").innerHTML = "";
+    document.getElementById("progressbar").style.width = "0%";
     DisableElements(false);
 }
 
@@ -375,32 +377,33 @@ function CreateFromFile(obj)
     var chunkSize = obj.info["piece length"];
     var file = singleFile;
     var fileSize = file.size;
-    var startIndex = 0;
-    var endIndex = chunkSize < fileSize ? chunkSize : fileSize;
+    const readChunkSize = 16777216;
     var pieces = [];
     obj.info["length"] = fileSize;
     var bytesReadSoFar = 0;
+    var readStartIndex = 0;
     
     document.getElementById("progressbar_text").innerHTML = "Reading file: " + file.name;
+    
+    var fr = new FileReader();
     
     var loaded = function(e)
     {
         var result = new Uint8Array(e.target.result);
-        var sha = sha1func(result);
-        for (var i = 0; i < 20; ++i)
-            pieces.push(sha[i]);
+        var count = Math.ceil(result.length / chunkSize);
         
-        bytesReadSoFar += endIndex - startIndex;
+        for (var i = 0; i < count; ++i)
+        {
+            var sha = sha1func(result.slice(i * chunkSize, (i + 1) * chunkSize));
+            pieces.push.apply(pieces, sha);
+        }
         
-        startIndex = endIndex;
-        endIndex += chunkSize;
-        if (endIndex > fileSize)
-            endIndex = fileSize;
+        bytesReadSoFar += result.length;
         
         var progress = bytesReadSoFar / fileSize * 100;
         progressBar.width = progress + "%";
         
-        if (startIndex < fileSize)
+        if (bytesReadSoFar < fileSize)
             reader();
         else
         {
@@ -414,11 +417,12 @@ function CreateFromFile(obj)
         if (!creationInProgress)
             return;
         
-        var fr = new FileReader();
-        fr.onload = loaded;
-        fr.onerror = Failed;
-        fr.readAsArrayBuffer(file.slice(startIndex, endIndex));
+        fr.readAsArrayBuffer(file.slice(readStartIndex, readStartIndex + readChunkSize));
+        readStartIndex += readChunkSize;
     }
+    
+    fr.onload = loaded;
+    fr.onerror = Failed;
     
     reader();
 }
@@ -436,6 +440,7 @@ function CreateFromFolder(obj)
     var chunkSize = obj.info["piece length"];
     var pieces = [];
     var bytesReadSoFar = 0;
+    const readChunkSize = 16777216;
     
     var totalSize = 0;
     var fileInfos = [];
@@ -458,39 +463,48 @@ function CreateFromFolder(obj)
     
     var progressBarText = document.getElementById("progressbar_text");
     
-    var startIndex = 0;
+    var readStartIndex = 0;
     var fileSize = currentFile.size;
-    var endIndex = chunkSize < fileSize ? chunkSize : fileSize;
     var buffer = new Uint8Array(chunkSize);
     var bufferIndex = 0;
     
+    var fr = new FileReader();
     var loaded = function(e)
     {
         var result = new Uint8Array(e.target.result);
-        buffer.set(result, bufferIndex);
+        var startIndex = 0;
         
-        var readBytesCount = endIndex - startIndex;
-        bytesReadSoFar += readBytesCount;
-        if (readBytesCount + bufferIndex == chunkSize)
+        while (true)
         {
-            var sha = sha1func(buffer);
-            for (var i = 0; i < 20; ++i)
-                pieces.push(sha[i]);
+            var endIndex = startIndex + chunkSize - bufferIndex;
             
-            bufferIndex = 0;
+            var sliced = result.slice(startIndex, endIndex);
+            if (sliced.length == 0)
+                break;
+            
+            buffer.set(sliced, bufferIndex);
+            
+            var readBytesCount = sliced.length;
+            if (readBytesCount + bufferIndex == chunkSize)
+            {
+                var sha = sha1func(buffer);
+                pieces.push.apply(pieces, sha);
+                
+                bufferIndex = 0;
+            }
+            else
+                bufferIndex += readBytesCount;
+            
+            startIndex = endIndex;
         }
-        else
-            bufferIndex += readBytesCount;
         
-        startIndex = endIndex;
-        endIndex += chunkSize;
-        if (endIndex > fileSize)
-            endIndex = fileSize;
+        bytesReadSoFar += result.length;
+        readStartIndex += result.length;
         
         var progress = bytesReadSoFar / totalSize * 100;
         progressBar.width = progress + "%";
         
-        if (startIndex < fileSize)
+        if (readStartIndex < fileSize)
             reader();
         else
         {
@@ -499,8 +513,7 @@ function CreateFromFolder(obj)
             if (fileIndex == allFiles.length)
             {
                 var sha = sha1func(buffer.slice(0, bufferIndex));
-                for (var i = 0; i < 20; ++i)
-                    pieces.push(sha[i]);
+                pieces.push.apply(pieces, sha);
                 
                 obj.info["pieces"] = pieces;
                 Finished(obj);
@@ -509,11 +522,7 @@ function CreateFromFolder(obj)
             {
                 currentFile = allFiles[fileIndex];
                 fileSize = currentFile.size;
-                startIndex = 0;
-                endIndex = chunkSize < fileSize ? chunkSize : fileSize;
-                if (bufferIndex + endIndex > chunkSize)
-                    endIndex = chunkSize - bufferIndex;
-                
+                readStartIndex = 0;
                 progressBarText.innerHTML = "Reading file: " + currentFile.name;
                 reader();
             }
@@ -525,14 +534,14 @@ function CreateFromFolder(obj)
         if (!creationInProgress)
             return;
         
-        var fr = new FileReader();
-        fr.onload = loaded;
-        fr.onerror = function()
-        {
-            Failed(currentFile);
-        };
-        fr.readAsArrayBuffer(currentFile.slice(startIndex, endIndex));
+        fr.readAsArrayBuffer(currentFile.slice(readStartIndex, readStartIndex + readChunkSize));
     }
+    
+    fr.onload = loaded;
+    fr.onerror = function()
+    {
+        Failed(currentFile);
+    };
     
     reader();
 }
