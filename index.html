@@ -538,6 +538,7 @@ function DisableElements(disable)
     document.getElementById("torrent_source").disabled = disable;
     document.getElementById("filechooserbutton").disabled = disable;
     document.getElementById("folderchooserbutton").disabled = !folderSelectionEnabled || disable;
+    document.getElementById("tracker_add_button").disabled = disable;
 }
 
 function CreateFromFile(obj)
