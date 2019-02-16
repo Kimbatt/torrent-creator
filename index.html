@@ -6,7 +6,6 @@
 <meta name="description" content="Create torrent files directly in your web browser.">
 <meta name="keywords" content="torrent,torrent file">
 <title>Online Torrent Creator</title>
-<link rel="icon" href="favicon.png">
 
 <style>
 
@@ -23,8 +22,7 @@ button
     border: none;
     border-radius: 5px;
     color: #ffffff;
-    padding: 10px 15px 10px 15px; /*top right bottom left*/
-    margin: 5px 0px 5px 20px;
+    padding: 10px 15px 10px 15px;
     font-family: "Verdana";
     font-size: 24px;
     cursor: pointer;
@@ -56,7 +54,7 @@ textarea
 
 a
 {
-    color: #00e0ff;
+    color: #32b2ff;
 }
 
 select
@@ -87,17 +85,59 @@ label
     white-space: nowrap;
 }
 
+#trackers_list_overlay
+{
+    visibility: hidden;
+    opacity: 0;
+    position: fixed;
+    background: rgba(0, 0, 0, 0.95);
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+}
+
+#trackers_list
+{
+    display: block;
+    position: relative;
+    border: 2px solid #606060;
+    border-radius: 10px;
+    margin: 20px;
+    background: black;
+    opacity: 1;
+    width: calc(100% - 44px);
+    padding: 5px;
+}
+
+.trackers-list-element
+{
+    margin: 5px;
+    font-size: 16px;
+    padding: 5px;
+    white-space: normal;
+}
+
+.tracker-list-element-hidden
+{
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.15s ease-out, visibility 0s 0.15s;
+}
+
 </style>
 </head>
 
 <body>
+
 <a href="https://github.com/Kimbatt/torrent-creator" style="position: absolute; width: 32px; height: 32px; top:20px; right:20px;">
-<svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="white" d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg></a>
+<svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="white" d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"></path></svg></a>
 <a id="download_link" style="display: none"></a>
 
-<div style="font-size: 32px; margin: 20px; margin-left: 35px;">Create torrent files online</div>
-<button style="width: 200px" onclick="document.getElementById('filechooser').click()">Select file</button>
-<button style="width: 200px" id="folderchooserbutton" onclick="document.getElementById('folderchooser').click()">Select folder</button>
+<div style="font-size: 32px; margin: 5px 0px 15px 20px;">Create torrent files online</div>
+<button style="width: 200px; margin: 5px 0px 5px 20px;" id="filechooserbutton" onclick="document.getElementById('filechooser').click()">Select file</button>
+<button style="width: 200px; margin: 5px 0px 5px 20px;" id="folderchooserbutton" onclick="document.getElementById('folderchooser').click()">Select folder</button>
 <div id="selected_file_info" style="display: inline; font-size: 22px; margin-left: 30px;"></div>
 <br />
 <input type="file" style="display: none" id="filechooser" onclick="this.value=null" onchange="FileSelected(this.files)">
@@ -105,14 +145,14 @@ label
 
 <div id="no_folder_warning" style="display: none; margin: 20px; color: #ff3d58; font-size: 20px;">Your browser does not support folder selection, so you can only create torrent files from single files. You can check which browsers support folder selection <a href="https://caniuse.com/#feat=input-file-directory">here.</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="javascript:void(0)" onclick="document.getElementById('no_folder_warning').style.display='none'">(hide warning)</a></div>
 
-<div id="no_wasm_warning" style="display: none; margin-left: 20px; color: #ff3d58; font-size: 20px;">Warning: your browser does not support webassembly. It will take a long time to read large files. You can check which browsers support webassembly <a href="https://caniuse.com/#feat=wasm">here.</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="javascript:void(0)" onclick="document.getElementById('no_wasm_warning').style.display='none'">(hide warning)</a></div>
+<div id="no_wasm_warning" style="display: none; margin-left: 20px; color: #ff3d58; font-size: 20px;">Warning: your browser does not support webassembly. It will take a long time to read large files. The browser window may freeze while creating the torrent files (in that case, do not close the browser, because the files are being processed (but you should really consider using a newer browser)). You can check which browsers support webassembly <a href="https://caniuse.com/#feat=wasm">here.</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="javascript:void(0)" onclick="document.getElementById('no_wasm_warning').style.display='none'">(hide warning)</a></div>
 
-<input type="text" id="torrent_name" style="width: calc(100% - 60px); font-size: 22px; padding: 5px; margin: 20px;" placeholder="Torrent name"></input>
+<input type="text" id="torrent_name" style="width: calc(100% - 60px); font-size: 22px; padding: 5px; margin: 20px;" placeholder="Torrent name" oninput="TorrentParamsChanged()">
 <br />
 
 <div style="display: flex; flex-wrap: wrap;">
     <label style="display: inline; margin-left: 30px; font-size: 22px; border-right: 100px solid transparent;">Piece size:
-    <select id="torrent_block_size" style="width: 200px; margin-left: 20px; margin-bottom: 20px; display: inline; flex-width: 200px;">
+    <select id="torrent_block_size" style="width: 200px; margin-left: 20px; margin-bottom: 20px; display: inline; flex-width: 200px;" oninput="TorrentParamsChanged()">
         <option value="0">Automatic</option>
         <option value="16384">16 kB</option>
         <option value="32768">32 kB</option>
@@ -128,16 +168,29 @@ label
     </select>
     </label>
 
-    <label style="display: inline; font-size: 22px; margin-left: 30px; margin-bottom: 20px;">Private torrent<input id="torrent_is_private" type="checkbox" style="transform:scale(2); background: white; margin-left: 20px;"></label>
+    <label style="display: inline; font-size: 22px; margin-left: 30px; margin-bottom: 20px;" oninput="TorrentParamsChanged()">Private torrent<input id="torrent_is_private" type="checkbox" style="transform:scale(2); background: white; margin-left: 20px;"></label>
 </div>
 
-<label style="font-size: 22px; margin-left: 30px;">Set creation date<input id="torrent_creation_date" type="checkbox" style="transform:scale(2); background: white; margin-left: 20px;" checked></label>
+<label style="font-size: 22px; margin-left: 30px;">Set creation date<input id="torrent_creation_date" type="checkbox" style="transform:scale(2); background: white; margin-left: 20px;" checked oninput="TorrentParamsChanged()"></label>
 <br />
-<textarea id="torrent_trackers" style="width: calc(100% - 68px); height: 150px; margin-top: 20px;" placeholder="Trackers, one per line (optional)"></textarea>
+
+<div id="trackers_list_overlay">
+    <div id="trackers_list">
+        <button style="position: absolute; margin: 10px 0px 0px 10px;" onclick="ShowTrackers(false)">Close</button>
+        <div style="left: 50%; font-size: 24px; text-align: center; margin-top: 10px; margin-bottom: 50px;">Click on a tracker to add it to the list!</div>
+        <div id="tracker_button_container"></div>
+        <div style="margin: 30px 0px 5px 5px; font-size: 20px;">Tracker list from <a href="https://github.com/ngosang/trackerslist/">https://github.com/ngosang/trackerslist/</a></div>
+    </div>
+</div>
+
+<div style="position: relative;">
+<textarea id="torrent_trackers" style="width: calc(100% - 68px); height: 150px; margin-top: 20px; white-space: pre-wrap;" placeholder="Trackers, separated by space or newline (optional)" oninput="TorrentParamsChanged()"></textarea>
+<button id="tracker_add_button" style="position: absolute; right: 35px; top: 30px; visibility: hidden; opacity: 0; transition: opacity 0.5s ease-in-out;" onclick="ShowTrackers(true)">Add some trackers</button>
+</div>
 <br />
-<input type="text" id="torrent_comment" style="width: calc(100% - 60px); font-size: 22px; padding: 5px; margin-left: 20px; margin-bottom: 20px;" placeholder="Comment (optional)"></input>
+<input type="text" id="torrent_comment" style="width: calc(100% - 60px); font-size: 22px; padding: 5px; margin-left: 20px; margin-bottom: 20px;" placeholder="Comment (optional)" oninput="TorrentParamsChanged()">
 <br />
-<input type="text" id="torrent_source" style="width: calc(100% - 60px); font-size: 22px; padding: 5px; margin-left: 20px; margin-bottom: 20px;" placeholder="Source (optional)"></input>
+<input type="text" id="torrent_source" style="width: calc(100% - 60px); font-size: 22px; padding: 5px; margin-left: 20px; margin-bottom: 20px;" placeholder="Source (optional)" oninput="TorrentParamsChanged()">
 <br />
 
 <div id="error_text" style="display: none; font-size: 25px; color: #ff3d58; margin-left: 20px; margin-bottom: 20px;"></div>
@@ -147,14 +200,57 @@ label
     <div id="progressbar_text" style="display:block; position: absolute; bottom: 4px; font-size: 25px; padding-bottom: 2px; padding-left: 6px; text-shadow: 2px 2px 5px blue;"></div>
 </div>
 
-<button id="create_torrent_button" style="display: grid; margin-top: 20px; width: calc(100% - 46px); max-width: 600px; height: 100px; font-size: 50px;" onclick="CreateTorrent()" disabled>Create torrent</button>
+<button id="create_torrent_button" style="display: grid; margin: 20px 0px 0px 20px; width: calc(100% - 46px); max-width: 600px; height: 100px; font-size: 50px; line-height: 80px;" onclick="CreateTorrent()" disabled>Create torrent</button>
+
 <script>
 
+var folderSelectionEnabled = false;
+var wasmEnabled = false;
 if (document.getElementById("folderchooser").webkitdirectory === undefined)
 {
     document.getElementById("no_folder_warning").style.display = "block";
     document.getElementById("folderchooserbutton").disabled = true;
 }
+else
+    folderSelectionEnabled = true;
+
+var favicon = document.createElement("link");
+favicon.rel = "shortcut icon";
+favicon.type = "image/png";
+favicon.href = "data:image/png;base64,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";
+document.getElementsByTagName("head")[0].appendChild(favicon);
+
+window.addEventListener("load", function()
+{
+    var scr = document.createElement("script");
+    scr.async = true;
+    scr.onload = function()
+    {
+        var trackerButtonContainer = document.getElementById("tracker_button_container");
+        var trackersTextarea = document.getElementById("torrent_trackers");
+        
+        for (var i = 0; i < torrent_trackers.length; ++i)
+        {
+            var currentButton = document.createElement("button");
+            currentButton.className = "trackers-list-element";
+            currentButton.innerHTML = torrent_trackers[i];
+            currentButton.onclick = function()
+            {
+                this.classList.add("tracker-list-element-hidden");
+                trackersTextarea.value += this.innerHTML + "\n";
+            };
+            
+            trackerButtonContainer.appendChild(currentButton);
+        }
+        
+        var button = document.getElementById("tracker_add_button");
+        button.style.visibility = "visible";
+        button.style.opacity = "1";
+    };
+    
+    scr.src = "https://valami.xyz/torrent_trackers.js.php";
+    document.getElementsByTagName("body")[0].appendChild(scr);
+});
 
 var sha1func;
 
@@ -191,7 +287,10 @@ function FolderSelected(files)
     document.getElementById("selected_file_info").innerHTML = "Selected folder: " + folderName + " (" + GetSizeStr(totalSize) + ")";
     singleFile = undefined;
     document.getElementById("create_torrent_button").disabled = false;
+    
+    ResetCreateButton();
 }
+
 function FileSelected(files)
 {
     singleFile = files[0];
@@ -201,16 +300,54 @@ function FileSelected(files)
     document.getElementById("selected_file_info").innerHTML = "Selected file: " + fileName + " (" + GetSizeStr(totalSize) + ")";
     allFiles = undefined;
     document.getElementById("create_torrent_button").disabled = false;
+    
+    ResetCreateButton();
 }
 
+function TorrentParamsChanged()
+{
+    ResetCreateButton();
+}
+
+var trackersOverlayVisible = false;
+function ShowTrackers(show)
+{
+    if (show == trackersOverlayVisible)
+        return;
+    
+    trackersOverlayVisible = show;
+    
+    if (show)
+    {
+        var buttonContainer = document.getElementById("tracker_button_container").childNodes;
+        for (var i = 0; i < buttonContainer.length; ++i)
+        {
+            if (buttonContainer[i].nodeType == 1)
+                buttonContainer[i].classList.remove("tracker-list-element-hidden");
+        }
+    }
+    
+    var overlay = document.getElementById("trackers_list_overlay");
+    overlay.style.transition = show ? "visibility 0s, opacity 0.15s ease-out" : "visibility 0s 0.15s, opacity 0.15s ease-in";
+    overlay.style.visibility = show ? "visible" : "hidden";
+    overlay.style.opacity = show ? "1" : "0";
+}
+
+window.addEventListener("keydown", function(e)
+{
+    if (e.code == "Escape")
+        ShowTrackers(false);
+});
+
 var creationInProgress = false;
+var creationFinished = false;
 var blockSize = 262144;
 function CreateTorrent()
 {
     var errorTextDiv = document.getElementById("error_text");
     if (creationInProgress)
     {
-        Finalize();
+        Cancel();
         return;
     }
     
@@ -235,11 +372,10 @@ function CreateTorrent()
         errorTextDiv.style.display = "block";
         return;
     }
-        
     
     var torrentObject = {};
     var trackers = document.getElementById("torrent_trackers").value.split("\n");
-    var okTrackers = [];
+    var okTrackers = {};
     for (var i = 0; i < trackers.length; ++i)
     {
         var current = trackers[i].trim();
@@ -247,7 +383,7 @@ function CreateTorrent()
             continue;
         
         if (current.match(/.+:\/\/([a-z0-9-]+\.)*([a-z0-9-]+):\d+((\/.*)\/announce)?/))
-            okTrackers.push(current);
+            okTrackers[current] = true;
         else
         {
             errorTextDiv.innerHTML = "Invalid tracker: " + current;
@@ -256,12 +392,13 @@ function CreateTorrent()
         }
     }
     
+    okTrackers = Object.keys(okTrackers);
     if (okTrackers.length != 0)
     {
-        torrentObject["announce"] = trackers[0];
+        torrentObject["announce"] = okTrackers[0];
         var announceList = [];
-        for (var i = 0; i < trackers.length; ++i)
-            announceList.push([trackers[i]]);
+        for (var i = 0; i < okTrackers.length; ++i)
+            announceList.push([okTrackers[i]]);
         
         torrentObject["announce-list"] = announceList;
     }
@@ -284,7 +421,7 @@ function CreateTorrent()
     blockSize = +blockSizeComboBox.options[blockSizeComboBox.selectedIndex].value;
     if (blockSize == 0)
     {
-        var factor = Math.round(Math.log2(totalSize / 1200));
+        var factor = Math.round(Math.log(totalSize / 1200) / Math.log(2));
         
         if (factor < 14)
             factor = 14;
@@ -309,14 +446,31 @@ function CreateTorrent()
     errorTextDiv.style.display = "none";
     DisableElements(true);
     
+    if (wasmEnabled)
+        sharedMemoryBuffer.set(new Uint8Array(16777216), 0);
+    
     if (singleFile !== undefined)
         CreateFromFile(torrentObject);
     else if (allFiles !== undefined)
         CreateFromFolder(torrentObject);
 }
 
+function ResetCreateButton()
+{
+    if (!creationFinished)
+        return;
+    
+    creationFinished = false;
+    
+    var button = document.getElementById("create_torrent_button");
+    button.onclick = CreateTorrent;
+    Cancel();
+}
+
 function Finished(obj)
 {
+    creationFinished = true;
+    
     var pieceBytes = obj.info["pieces"];
     var pieceStr = "";
     for (var i = 0; i < pieceBytes.length; ++i)
@@ -324,18 +478,32 @@ function Finished(obj)
     
     obj.info["pieces"] = pieceStr;
     
-    var a = document.getElementById("download_link");
-    a.download = obj.info.name + ".torrent";
-    var url = window.URL.createObjectURL(new Blob([new Uint8Array(Bencode.EncodeToBytes(obj))], { type: "application/octet-stream" }));
-    a.href = url;
-    a.click();
-    a.onclick = function()
-    {
-        window.URL.revokeObjectURL(url);
-        a.onclick = null;
-    };
+    var blob = new Blob([new Uint8Array(Bencode.EncodeToBytes(obj))], { type: "application/octet-stream" });
     
-    Finalize();
+    var button = document.getElementById("create_torrent_button");
+    button.innerHTML = "Download torrent file";
+    if (window.navigator.msSaveOrOpenBlob)
+    {
+        button.onclick = function()
+        {
+            window.navigator.msSaveOrOpenBlob(blob, obj.info.name + ".torrent");
+        };
+    }
+    else
+    {
+        var a = document.getElementById("download_link");
+        a.download = obj.info.name + ".torrent";
+        var url = window.URL.createObjectURL(blob);
+        a.href = url;
+        button.onclick = function()
+        {
+            a.click();
+        };
+    }
+    
+    document.getElementById("progressbar_text").innerHTML = "Done";
+    creationInProgress = false;
+    DisableElements(false);
 }
 
 function Failed(filename)
@@ -346,10 +514,10 @@ function Failed(filename)
     document.getElementById("progressbar").style.display = "none";
     document.getElementById("progressbar").style.width = "0%";
     
-    Finalize();
+    Cancel();
 }
 
-function Finalize()
+function Cancel()
 {
     creationInProgress = false;
     document.getElementById("create_torrent_button").innerHTML = "Create torrent";
@@ -368,6 +536,8 @@ function DisableElements(disable)
     document.getElementById("torrent_trackers").disabled = disable;
     document.getElementById("torrent_comment").disabled = disable;
     document.getElementById("torrent_source").disabled = disable;
+    document.getElementById("filechooserbutton").disabled = disable;
+    document.getElementById("folderchooserbutton").disabled = !folderSelectionEnabled || disable;
 }
 
 function CreateFromFile(obj)
@@ -394,7 +564,7 @@ function CreateFromFile(obj)
         
         for (var i = 0; i < count; ++i)
         {
-            var sha = sha1func(result.slice(i * chunkSize, (i + 1) * chunkSize));
+            var sha = sha1func(result.subarray(i * chunkSize, (i + 1) * chunkSize));
             pieces.push.apply(pieces, sha);
         }
         
@@ -469,6 +639,7 @@ function CreateFromFolder(obj)
     var bufferIndex = 0;
     
     var fr = new FileReader();
+    
     var loaded = function(e)
     {
         var result = new Uint8Array(e.target.result);
@@ -478,7 +649,7 @@ function CreateFromFolder(obj)
         {
             var endIndex = startIndex + chunkSize - bufferIndex;
             
-            var sliced = result.slice(startIndex, endIndex);
+            var sliced = result.subarray(startIndex, endIndex);
             if (sliced.length == 0)
                 break;
             
@@ -512,7 +683,7 @@ function CreateFromFolder(obj)
             
             if (fileIndex == allFiles.length)
             {
-                var sha = sha1func(buffer.slice(0, bufferIndex));
+                var sha = sha1func(buffer.subarray(0, bufferIndex));
                 pieces.push.apply(pieces, sha);
                 
                 obj.info["pieces"] = pieces;
@@ -1399,6 +1570,7 @@ function sha1_unrolled(str)
 <script>
 if (typeof WebAssembly === "object")
 {
+wasmEnabled = true;
 var sha1wasm;
 
 var nothingFunction = function() { };
@@ -1415,6 +1587,7 @@ var importObject =
     },
 };
 
+// this is the byte representation of the assembly compiled from sha1.cpp
 var wasmBytes = new Int32Array([1836278016,1,-2139057919,1610809472,2130804481,8323424,2139030368,41877887,-2139062105,1694696192,1594259054,1348559962,50397302,91647589,1634622047,50331754,108424805,1936549229,33584229,-2139061757,16842880,-2139061244,1879113856,-2096824320,8421504,100728833,-2139062143,-1861812224,8421504,1701643778,2037542765,1929641986,3236200,-1515124221,16810112,-2139052629,2130838272,2136309249,371261505,2129729,-2139029459,272697472,754983028,-2139062272,1092297224,544371736,-2113917696,1091076224,544371720,-2097140480,570982528,354578973,578159169,538853714,1778467154,577834817,239168338,577458720,1095901266,572213248,54618647,-1392434582,579207746,52471555,-1484251070,553717787,541065730,1786593557,21041954,536874312,542646528,1786528021,1098252865,371354113,35673889,1073960481,1478514208,570425384,1947746642,138498592,-2139078284,1920010236,138498592,-25149066,1377857795,1920342081,145010,71391264,542646634,1778663766,1461736993,577404737,184552791,37749259,541065792,1896038685,54612514,536874310,1174552914,-2143223539,2021687424,1377851425,222757185,536879106,2134993429,11626,1098127425,75530368,207102322,2099970,761926432,406913024,536879220,1377987093,761953857,272695296,1377858164,761954113,138477568,-2143194508,1478586881,537592076,1779769344,2118210082,11626,544479297,1786724690,1090519085,1098019856,1912766592,537614369,1091969026,543847426,144984,1394671681,371196448,577372481,1946304850,536887658,1946304791,538575376,542253058,37841431,1377987188,88152864,145014,71389728,1091903594,37123075,37749248,1157701696,35651597,560610369,-1007664814,561815243,-1460256428,553746889,-1174519467,561628651,-678870698,561970870,-964607657,554089108,541066072,1095901272,36203112,537862656,1784693074,570425896,1377858317,570425896,1377858325,678059073,237109250,1413567008,141418,544410658,1786003794,570425896,1377858324,678056001,102891522,1212240416,141418,544409890,1377858319,678067265,371326978,1996570995,1098061602,455243521,1996570995,220208418,1480675872,141418,544410402,1786265938,570425896,203453203,1279349280,141418,544409378,1785479506,570425896,354448146,1996570995,1098062370,472020737,538255475,471888659,538189939,438334226,1931288691,578224449,21066530,1931747959,438311712,1931616371,354424608,1931288691,337647136,1931157619,1883329056,141418,253759778,1930895475,1682002464,141418,236982306,1930829939,102763296,1930502259,1377830688,678052929,170000386,1930436723,1098060576,404911873,1996570995,1098062114,505575169,1996570995,1098063906,589461249,1996570995,1098065186,706901761,1996570995,471870498,544413984,1930502163,544413984,1930436626,544413728,21066524,1931420279,578224449,438334241,544413728,606106399,1996570995,1098065698,690124545,539238515,689992481,539107443,656438047,1932271731,578224449,21066543,1932599927,656419360,1932468339,606086432,1932271731,572531488,1932140659,488644640,1931812979,455089696,1931681907,387979552,1931485299,371202080,1931354227,1098064160,639792897,1996570995,1098065954,723678977,1996570995,1098067234,841119489,1996570995,1098069026,925005569,1996570995,689977634,544417824,1931485217,544417824,1931354143,544417312,21066537,1932403319,578224449,656438064,544417312,824210222,1996570995,1098069538,941782785,540090483,941650736,539959411,908096302,1933123699,578224449,21066558,1933582967,908080928,1933451379,824194080,1933123699,790639136,1932992627,740306208,1932796019,706751264,1932664947,622864416,1932337267,589309472,1932206195,1098068000,857896705,1996570995,1098069282,975337217,1996570995,1098071074,1059223297,1996570995,1098072354,1176663809,1996570995,941639714,544421152,1932337200,544421152,1932206126,544420640,21066552,1933255287,578224449,908096317,544420640,1075868475,1996570995,1098072866,1159886593,541073523,1159754557,540942451,1126200123,1934106739,578224449,21066571,1934434935,1126188576,1934303347,1075855648,1934106739,1042300704,1933975667,958413856,1933647987,924858912,1933516915,874525984,1933320307,840971040,1933189235,1098071328,1109554945,1996570995,1098073122,1193441025,1996570995,1098074402,1310881537,1996570995,1098075938,1361213185,1996570995,541270122,991982402,544422432,1159754562,1996570995,544426530,21066573,542122615,1933320253,544424992,21066570,541860471,541139015,540549182,539828275,539238442,538517535,1096294412,86144798,537337962,1461742166,544298528,1096228949,1920037759,543839264,1996833112,1779048554,-1723791582,97815027,537666154,-431918843,2058090124,543885088,1998471511,1920010018,537337962,1444966744,2134988832,544371059,153119317,1091313770,577402629,-208060156,1778766985,88168482,136473207,-1980524223,577373652,1096294409,170030878,-1931067023,544910326,203451144,578231873,1785884940,119539232,542646378,-431918836,2058090124,543884320,1785884933,88148256,86141559,-1980524223,577373652,1996833112,1090789994,-729156711,102918661,578231873,1779376135,507578656,537862775,186673677,543820832,1896816728,-158538175,86014635,1896489067,102787698,1786185025,-1723790302,97815027,537731690,-431918841,2058090124,543886368,1998471512,1920030754,537534570,102787598,1097947168,-1409905434,1795432570,1920012064,1091379306,577402629,-208060154,1778766985,88149794,186804855,-1980524223,577373652,1091510286,203585310,-1931067023,544910326,220228363,578231873,1785884941,270555168,537862250,-431918835,2058090124,543884832,1785884935,88149536,102918775,-1980524223,577373652,1996833112,1091248746,-729156711,253913605,578231873,1779834896,507579936,538321527,220228116,543822368,1897275480,-158538175,102791851,1896620139,253782642,1786185025,-1723788766,97815027,538190442,-431918832,2058090124,543887904,1998471512,1920030754,537665642,253782545,1097947168,-1409905434,1795891322,1920013856,1091838058,577402629,-208060143,1778766985,88151586,220359287,-1980524223,577373652,1091969039,304248606,-1931067023,544910326,337668877,578231873,1785884948,320886816,538321002,-431918828,2058090124,543887648,1785884944,88149792,287468151,-1980524223,577373652,1996833112,1091576426,-729156711,371354117,578231873,253782547,578231873,1779900441,354423840,542646378,-431918823,2058090124,543887648,1785884946,88151584,388131447,-1980524223,577373652,1897078805,-158538175,388004523,1096294507,1478653726,543847025,1779965970,1478497824,-1931067023,544910326,421554960,543847025,1996833045,1092166250,-729156711,371354117,1786185025,-1723789534,97815027,538387050,1998471446,1097930786,-1409905434,1796153466,507581728,1897210487,438332018,543840288,1897209878,-158538175,421558955,1897078891,388000370,1786185025,-1980524223,577373652,1996833112,-208060054,1778766985,507581986,1779638903,404757536,1096294506,438466334,507582240,1930895991,1785927200,354425632,538386538,1478521624,371223155,1786185025,-405298879,577373942,1996833112,-677297814,1778841319,507581730,538321527,1998471512,544414498,1779900446,438309664,1935155315,1091903594,1097496325,-152578143,1478650374,488663667,543824416,1930633243,1785926944,88168480,-1589548425,116844503,1091904106,1097496325,-152578143,388131334,578231873,572549661,543823392,1998471445,1478497058,578231873,388002648,538995315,543824672,1930829912,1785926944,88151840,-1589548425,116844503,1091904106,1097496325,-152578143,371354118,578231873,1091903511,455243550,539041907,488663640,544412448,543847189,1996833046,-677297814,1778841319,1785944098,320873248,538648682,371225373,1478519411,1786185025,-405298879,577373942,1996833045,-677297814,1778841319,507581986,1780294263,387982624,1091903594,321025822,507598880,1935155831,1785927200,455091744,542646378,354448151,371223155,1786185025,-405298879,577373942,1996833045,-677297814,1778841319,507581986,538387063,1998471445,544414498,1784160295,320871712,1930764403,1091969130,1097496325,-152578143,1478650374,673213043,543822624,1931288603,1785927200,88168480,-1589548425,116844503,1091904106,1097496325,-152578143,371354118,578231873,723544605,543823648,1998471445,1478497058,578231873,371225432,689990259,543824672,1930895448,1785926944,88151584,-1589548425,116844503,1091904106,1097496325,-152578143,371354118,578231873,1091903511,455243550,539762803,488663640,544412448,543847189,1996833046,-677297814,1778841319,1785926946,320876064,538648682,371225373,354445939,1786185025,-405298879,577373942,1996833046,-677297814,1778841319,507583778,1784160887,354431520,578231873,790653461,543824672,538255382,544305687,1897340949,488663666,1786185025,-285615039,577403128,542646299,1998471446,1903302178,371218464,543847025,1779900464,371203360,1903301920,354424352,543847025,1996833051,-103005846,1786312942,88153378,-599692681,2029580025,538124906,1998471453,455087394,578231873,544305687,1897340949,824207986,543823392,538386461,544305752,1901600791,320891506,1786185025,-285615039,577403128,1996833051,-103005846,1786312942,507583778,1784160887,320877856,578231873,874539542,543823648,538320923,544305685,1897209878,488663666,1786185025,-285615039,577403128,542646291,1998471451,1903302434,387995680,543847025,1779769398,387980576,1903302176,371201824,543847025,1996833043,-103005846,1786312942,88152866,-599692681,2029580025,538780266,1998471451,320869666,578231873,544305686,1897275413,924871282,543823648,538320923,544305752,1901600790,488663666,1786185025,-285615039,577403128,1996833051,-103005846,1786312942,507581218,1784160887,488651552,578231873,975202839,543823392,538386459,544305685,1897209879,320891506,1786185025,-285615039,577403128,542646301,1998471451,1903302178,371218464,543847025,1779769401,371200800,1903302432,387978784,543847025,1996833053,-103005846,1786312942,88152866,-599692681,2029580025,538124906,1998471451,488641826,578231873,544305687,1897340949,1008757362,543823392,538386459,544305752,1901600791,320891506,1786185025,-285615039,577403128,1996833051,-103005846,1786312942,507583778,1784160887,320880672,578231873,1025534486,543823648,538320923,544305685,1897209878,488663666,1786185025,-285615039,577403128,542646291,1998471451,1903302434,387995680,543847025,1779769407,387980576,1903302176,371201824,543847025,1996833043,-103005846,1786312942,88152866,-599692681,2029580025,538780266,1998471451,320869922,578231873,544305685,1897209878,1109420658,543823648,538255387,544305752,1901600789,488663666,1786185025,-285615039,577403128,1996833112,-103005846,1786312942,507582242,1780163191,371213344,1096294506,321025822,507583776,1931289207,1785927456,354435872,538779754,1478521622,388000371,1786185025,-1954294207,577404115,1996833112,-2083110550,1786565515,507581730,538321527,1998471512,544413474,1780293702,320871200,1935155315,1091903594,1097496325,-745831466,1478650492,1159752307,543822624,1931157527,1785926944,88168480,-700355977,2094238595,1091904106,1097496325,-745831466,455240316,578231873,1243638301,543823392,1998471445,1478497058,578231873,455111512,1210083955,543823648,1930829912,1785926944,88152864,-700355977,2094238595,1091904106,1097496325,-745831466,371354236,578231873,1091903511,455243550,541663347,488663640,544412448,543847189,1996833046,-2083110550,1786565515,1785944098,320883488,538648682,371225373,1478519411,1786185025,-1954294207,577404115,1996833045,-2083110550,1786565515,507581986,1780294263,387992864,1091903594,321025822,507598880,1935155831,1785927200,455101984,542646378,354448151,371223155,1786185025,-1954294207,577404115,1996833045,-2083110550,1786565515,507581986,538387063,1998471445,544414498,1933516866,544425760,21066572,538583671,488663640,544412448,543847189,1996833046,-2083110550,1786565515,1785944098,320884512,538648682,371225373,1478519411,1786185025,-1954294207,577404115,1996833045,-2083110550,1786565515,507581986,1780294263,387993888,1091903594,321025822,507598880,1935155831,1785927200,1092633632,1934172275,1098062368,438466305,543824672,1930895448,1785926944,88151584,-700355977,2094238595,1091904106,1097496325,-745831466,371354236,578231873,1091903515,388134686,541401203,1277195076,1934631027,544670017,488663640,544412448,543847189,1996833046,-2083110550,1786565515,1785926946,1176520480,1934499955,1098062368,320894721,538386538,371225373,354445939,1786185025,-1954294207,577404115,1996833046,-2083110550,1786565515,371218465,560617248,1091903575,1444968222,542515562,1783898135,455103521,560616736,1095901269,560595136,1095966802,1394764304,222888224,184683520,-964607733,554089108,-678870696,561970870,-1174519465,561628651,-1460256426,553746889,-1007664811,561815243,35654484,2097168,272717856,-2063582602,537428096,1096294400,3831320,142639236,1478492192,980813889,-2139060736,536879112,-2030028200,537428096,1096228864,3831320,142639240,1461714976,980815937,-2139059968,536879112,1980252503,-2138439622,2099328,3823392,142639243,1444937760,980817985,-2139059200,536879112,1980776790,-2138243014,2099328,138499616,-1912587658,537428096,978722816,-2139058432,536879112,1981301077,-2138046406,2099328,272717088,-1862256010,537428096,1096097792,3831304,142639250,1428160544,-2137849798,2099328,406934560,-1811924362,537428096,1096032256,3831312,142639253,1411383328,980813889,-2139056640,536879112,-1761592748,185106560]);
 
 /*
@@ -1470,15 +1643,6 @@ else
 }
 
 </script>
-
-<script async src="https://www.googletagmanager.com/gtag/js?id=UA-102166927-2"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag() { dataLayer.push(arguments); }
-  gtag("js", new Date());
-  gtag("config", "UA-102166927-2");
-</script>
-
 
 </body>
 </html>
