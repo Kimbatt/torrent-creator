@@ -147,12 +147,12 @@ label
 
 <div id="no_wasm_warning" style="display: none; margin-left: 20px; color: #ff3d58; font-size: 20px;">Warning: your browser does not support webassembly. It will take a long time to read large files. The browser window may freeze while creating the torrent files (in that case, do not close the browser, because the files are being processed (but you should really consider using a newer browser)). You can check which browsers support webassembly <a href="https://caniuse.com/#feat=wasm">here.</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="javascript:void(0)" onclick="document.getElementById('no_wasm_warning').style.display='none'">(hide warning)</a></div>
 
-<input type="text" id="torrent_name" style="width: calc(100% - 60px); font-size: 22px; padding: 5px; margin: 20px;" placeholder="Torrent name" oninput="TorrentParamsChanged()">
+<input type="text" id="torrent_name" style="width: calc(100% - 60px); font-size: 22px; padding: 5px; margin: 20px;" placeholder="Torrent name" oninput="TorrentParamsChanged('name')">
 <br />
 
 <div style="display: flex; flex-wrap: wrap;">
     <label style="display: inline; margin-left: 30px; font-size: 22px; border-right: 100px solid transparent;">Piece size:
-    <select id="torrent_block_size" style="width: 200px; margin-left: 20px; margin-bottom: 20px; display: inline; flex-width: 200px;" oninput="TorrentParamsChanged()">
+    <select id="torrent_block_size" style="width: 200px; margin-left: 20px; margin-bottom: 20px; display: inline; flex-width: 200px;" oninput="TorrentParamsChanged('blocksize')">
         <option value="0">Automatic</option>
         <option value="16384">16 kB</option>
         <option value="32768">32 kB</option>
@@ -168,10 +168,10 @@ label
     </select>
     </label>
 
-    <label style="display: inline; font-size: 22px; margin-left: 30px; margin-bottom: 20px;" oninput="TorrentParamsChanged()">Private torrent<input id="torrent_is_private" type="checkbox" style="transform:scale(2); background: white; margin-left: 20px;"></label>
+    <label style="display: inline; font-size: 22px; margin-left: 30px; margin-bottom: 20px;" oninput="TorrentParamsChanged('private')">Private torrent<input id="torrent_is_private" type="checkbox" style="transform:scale(2); background: white; margin-left: 20px;"></label>
 </div>
 
-<label style="font-size: 22px; margin-left: 30px;">Set creation date<input id="torrent_creation_date" type="checkbox" style="transform:scale(2); background: white; margin-left: 20px;" checked oninput="TorrentParamsChanged()"></label>
+<label style="font-size: 22px; margin-left: 30px;">Set creation date<input id="torrent_creation_date" type="checkbox" style="transform:scale(2); background: white; margin-left: 20px;" checked oninput="TorrentParamsChanged('creationdate')"></label>
 <br />
 
 <div id="trackers_list_overlay">
@@ -184,13 +184,13 @@ label
 </div>
 
 <div style="position: relative;">
-<textarea id="torrent_trackers" style="width: calc(100% - 68px); height: 150px; margin-top: 20px; white-space: pre-wrap;" placeholder="Trackers, separated by space or newline (optional)" oninput="TorrentParamsChanged()"></textarea>
+<textarea id="torrent_trackers" style="width: calc(100% - 68px); height: 150px; margin-top: 20px; white-space: pre-wrap;" placeholder="Trackers, separated by space or newline (optional)" oninput="TorrentParamsChanged('trackers')"></textarea>
 <button id="tracker_add_button" style="position: absolute; right: 35px; top: 30px; visibility: hidden; opacity: 0; transition: opacity 0.5s ease-in-out;" onclick="ShowTrackers(true)">Add some trackers</button>
 </div>
 <br />
-<input type="text" id="torrent_comment" style="width: calc(100% - 60px); font-size: 22px; padding: 5px; margin-left: 20px; margin-bottom: 20px;" placeholder="Comment (optional)" oninput="TorrentParamsChanged()">
+<input type="text" id="torrent_comment" style="width: calc(100% - 60px); font-size: 22px; padding: 5px; margin-left: 20px; margin-bottom: 20px;" placeholder="Comment (optional)" oninput="TorrentParamsChanged('comment')">
 <br />
-<input type="text" id="torrent_source" style="width: calc(100% - 60px); font-size: 22px; padding: 5px; margin-left: 20px; margin-bottom: 20px;" placeholder="Source (optional)" oninput="TorrentParamsChanged()">
+<input type="text" id="torrent_source" style="width: calc(100% - 60px); font-size: 22px; padding: 5px; margin-left: 20px; margin-bottom: 20px;" placeholder="Source (optional)" oninput="TorrentParamsChanged('source')">
 <br />
 
 <div id="error_text" style="display: none; font-size: 25px; color: #ff3d58; margin-left: 20px; margin-bottom: 20px;"></div>
@@ -304,9 +304,19 @@ function FileSelected(files)
     ResetCreateButton();
 }
 
-function TorrentParamsChanged()
+var torrentChanged = false;
+function TorrentParamsChanged(type)
 {
-    ResetCreateButton();
+    switch (type)
+    {
+        case "blocksize":
+            ResetCreateButton();
+            return;
+        default:
+            break;
+    }
+    
+    torrentChanged = true;
 }
 
 var trackersOverlayVisible = false;
@@ -342,38 +352,32 @@ window.addEventListener("keydown", function(e)
 var creationInProgress = false;
 var creationFinished = false;
 var blockSize = 262144;
-function CreateTorrent()
+var torrentObject;
+function SetTorrentData()
 {
     var errorTextDiv = document.getElementById("error_text");
-    if (creationInProgress)
-    {
-        Cancel();
-        return;
-    }
-    
     var torrentName = document.getElementById("torrent_name").value.trim();
     if (torrentName == "")
     {
         errorTextDiv.innerHTML = "Torrent name must not be empty";
         errorTextDiv.style.display = "block";
-        return;
+        return false;
     }
     
     if (torrentName.match(/[<>:\"\\\/\|\?\*]/))
     {
         errorTextDiv.innerHTML = "Torrent name cannot contain any of the following characters: < > : \\ / | ? *";
         errorTextDiv.style.display = "block";
-        return;
+        return false;
     }
     
     if (torrentName.length > 255)
     {
         errorTextDiv.innerHTML = "Torrent name cannot be longer than 255 characters";
         errorTextDiv.style.display = "block";
-        return;
+        return false;
     }
     
-    var torrentObject = {};
     var trackers = document.getElementById("torrent_trackers").value.split("\n");
     var okTrackers = {};
     for (var i = 0; i < trackers.length; ++i)
@@ -388,7 +392,7 @@ function CreateTorrent()
         {
             errorTextDiv.innerHTML = "Invalid tracker: " + current;
             errorTextDiv.style.display = "block";
-            return;
+            return false;
         }
     }
     
@@ -412,9 +416,11 @@ function CreateTorrent()
     
     torrentObject["created by"] = "kimbatt.github.io/torrent-creator";
     
-    var infoObject = {};
+    var infoObject = torrentObject["info"] || {};
     if (document.getElementById("torrent_is_private").checked)
         infoObject["private"] = 1;
+    else
+        delete infoObject["private"];
     
     infoObject["name"] = torrentName;
     var blockSizeComboBox = document.getElementById("torrent_block_size");
@@ -434,16 +440,34 @@ function CreateTorrent()
     infoObject["piece length"] = blockSize;
     
     var source = document.getElementById("torrent_source").value;
-    if (source != "")
+    if (source == "")
+        delete infoObject["source"];
+    else
         infoObject["source"] = source;
     
     torrentObject["info"] = infoObject;
     
+    errorTextDiv.style.display = "none";
+    return true;
+}
+
+function CreateTorrent()
+{
+    if (creationInProgress)
+    {
+        Cancel();
+        return;
+    }
+    
+    torrentObject = {};
+    if (!SetTorrentData())
+        return;
+    
+    torrentChanged = false;
     creationInProgress = true;
     document.getElementById("progressbar_container").className = "progress-bar-visible";
     document.getElementById("create_torrent_button").innerHTML = "Cancel";
     
-    errorTextDiv.style.display = "none";
     DisableElements(true);
     
     if (wasmEnabled)
@@ -461,24 +485,27 @@ function ResetCreateButton()
         return;
     
     creationFinished = false;
+    torrentChanged = false;
+    torrentObject = undefined;
     
     var button = document.getElementById("create_torrent_button");
     button.onclick = CreateTorrent;
     Cancel();
 }
 
-function Finished(obj)
+var blobUrl;
+function Finished()
 {
     creationFinished = true;
     
-    var pieceBytes = obj.info["pieces"];
+    var pieceBytes = torrentObject.info["pieces"];
     var pieceStr = "";
     for (var i = 0; i < pieceBytes.length; ++i)
         pieceStr += String.fromCharCode(pieceBytes[i]);
     
-    obj.info["pieces"] = pieceStr;
+    torrentObject.info["pieces"] = pieceStr;
     
-    var blob = new Blob([new Uint8Array(Bencode.EncodeToBytes(obj))], { type: "application/octet-stream" });
+    var blob = new Blob([new Uint8Array(Bencode.EncodeToBytes(torrentObject))], { type: "application/octet-stream" });
     
     var button = document.getElementById("create_torrent_button");
     button.innerHTML = "Download torrent file";
@@ -486,17 +513,38 @@ function Finished(obj)
     {
         button.onclick = function()
         {
-            window.navigator.msSaveOrOpenBlob(blob, obj.info.name + ".torrent");
+            if (torrentChanged)
+            {
+                if (!SetTorrentData())
+                    return;
+                
+                blob = new Blob([new Uint8Array(Bencode.EncodeToBytes(torrentObject))], { type: "application/octet-stream" });
+            }
+            
+            window.navigator.msSaveOrOpenBlob(blob, torrentObject.info.name + ".torrent");
         };
     }
     else
     {
         var a = document.getElementById("download_link");
-        a.download = obj.info.name + ".torrent";
-        var url = window.URL.createObjectURL(blob);
-        a.href = url;
+        a.download = torrentObject.info.name + ".torrent";
+        window.URL.revokeObjectURL(blobUrl);
+        blobUrl = window.URL.createObjectURL(blob);
+        a.href = blobUrl;
         button.onclick = function()
         {
+            if (torrentChanged)
+            {
+                if (!SetTorrentData())
+                    return;
+                
+                blob = new Blob([new Uint8Array(Bencode.EncodeToBytes(torrentObject))], { type: "application/octet-stream" });
+                a.download = torrentObject.info.name + ".torrent";
+                window.URL.revokeObjectURL(blobUrl);
+                blobUrl = window.URL.createObjectURL(blob);
+                a.href = blobUrl;
+            }
+            
             a.click();
         };
     }
@@ -715,6 +763,7 @@ function CreateFromFolder(obj)
         Failed(currentFile);
     };
     
+    progressBarText.innerHTML = "Reading file: " + currentFile.name;
     reader();
 }
 
