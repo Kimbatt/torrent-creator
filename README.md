@@ -13,4 +13,6 @@ Select a file or a folder, then set the parameters:
 * Source: Arbitrary text. Setting the source of a torrent can be used to produce a different info hash. Can be empty.
 
 Click on the Create torrent button to create the torrent file. Everything is done locally, on your computer.  
-After it has completed, the torrent file will be downloaded automatically.
+After it has completed, the torrent file can be downloaded by clicking on the download button.
+
+If you have an active internet connection, a list of a few available trackers will be loaded; you can add trackers from this list to the torrent file.
