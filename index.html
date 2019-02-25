@@ -222,18 +222,22 @@ document.getElementsByTagName("head")[0].appendChild(favicon);
 
 window.addEventListener("load", function()
 {
-    var scr = document.createElement("script");
-    scr.async = true;
-    scr.onload = function()
+    var request = new XMLHttpRequest();
+    request.onload = function(ev)
     {
+        if (ev.target.readyState != 4 || (ev.target.status != 200 && ev.target.status != 0))
+            return;
+        
+        var trackerList = ev.target.response.trim().split(/\s+/);
+
         var trackerButtonContainer = document.getElementById("tracker_button_container");
         var trackersTextarea = document.getElementById("torrent_trackers");
         
-        for (var i = 0; i < torrent_trackers.length; ++i)
+        for (var i = 0; i < trackerList.length; ++i)
         {
             var currentButton = document.createElement("button");
             currentButton.className = "trackers-list-element";
-            currentButton.innerHTML = torrent_trackers[i];
+            currentButton.innerHTML = trackerList[i];
             currentButton.onclick = function()
             {
                 this.classList.add("tracker-list-element-hidden");
@@ -248,8 +252,8 @@ window.addEventListener("load", function()
         button.style.opacity = "1";
     };
     
-    scr.src = "https://valami.xyz/torrent_trackers.js.php";
-    document.getElementsByTagName("body")[0].appendChild(scr);
+    request.open("GET", "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt");
+    request.send();
 });
 
 var sha1func;
