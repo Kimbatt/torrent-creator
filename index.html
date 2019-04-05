@@ -126,6 +126,15 @@ label
     transition: opacity 0.15s ease-out, visibility 0s 0.15s;
 }
 
+.input-fullwidth
+{
+    width: calc(100% - 60px);
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 22px;
+    padding: 5px;
+    margin-left: 20px;
+}
+
 </style>
 </head>
 
@@ -147,12 +156,12 @@ label
 
 <div id="no_wasm_warning" style="display: none; margin-left: 20px; color: #ff3d58; font-size: 20px;">Warning: your browser does not support webassembly. It will take a long time to read large files. The browser window may freeze while creating the torrent files (in that case, do not close the browser, because the files are being processed (but you should really consider using a newer browser)). You can check which browsers support webassembly <a href="https://caniuse.com/#feat=wasm">here.</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="javascript:void(0)" onclick="document.getElementById('no_wasm_warning').style.display='none'">(hide warning)</a></div>
 
-<input type="text" id="torrent_name" style="width: calc(100% - 60px); font-size: 22px; padding: 5px; margin: 20px;" placeholder="Torrent name" oninput="TorrentParamsChanged('name')">
+<input type="text" id="torrent_name" class="input-fullwidth" style="margin: 20px;" placeholder="Torrent name" oninput="TorrentParamsChanged('name')">
 <br />
 
 <div style="display: flex; flex-wrap: wrap;">
     <label style="display: inline; margin-left: 30px; font-size: 22px; border-right: 100px solid transparent;">Piece size:
-    <select id="torrent_block_size" style="width: 200px; margin-left: 20px; margin-bottom: 20px; display: inline; flex-width: 200px;" oninput="TorrentParamsChanged('blocksize')">
+    <select id="torrent_block_size" style="width: 200px; margin-left: 20px; margin-bottom: 20px;" oninput="TorrentParamsChanged('blocksize')">
         <option value="0">Automatic</option>
         <option value="16384">16 kB</option>
         <option value="32768">32 kB</option>
@@ -168,7 +177,7 @@ label
     </select>
     </label>
 
-    <label style="display: inline; font-size: 22px; margin-left: 30px; margin-bottom: 20px;" oninput="TorrentParamsChanged('private')">Private torrent<input id="torrent_is_private" type="checkbox" style="transform:scale(2); background: white; margin-left: 20px;"></label>
+    <label style="font-size: 22px; margin-left: 30px; margin-bottom: 20px;" oninput="TorrentParamsChanged('private')">Private torrent<input id="torrent_is_private" type="checkbox" style="transform:scale(2); background: white; margin-left: 20px;"></label>
 </div>
 
 <label style="font-size: 22px; margin-left: 30px;">Set creation date<input id="torrent_creation_date" type="checkbox" style="transform:scale(2); background: white; margin-left: 20px;" checked oninput="TorrentParamsChanged('creationdate')"></label>
@@ -184,13 +193,13 @@ label
 </div>
 
 <div style="position: relative;">
-<textarea id="torrent_trackers" style="width: calc(100% - 68px); height: 150px; margin-top: 20px; white-space: pre-wrap;" placeholder="Trackers, separated by space or newline (optional)" oninput="TorrentParamsChanged('trackers')"></textarea>
+<textarea id="torrent_trackers" class="input-fullwidth" style="height: 150px; margin-top: 20px; white-space: pre-wrap;" placeholder="Trackers, separated by space or newline (optional)" oninput="TorrentParamsChanged('trackers')"></textarea>
 <button id="tracker_add_button" style="position: absolute; right: 35px; top: 30px; visibility: hidden; opacity: 0; transition: opacity 0.5s ease-in-out;" onclick="ShowTrackers(true)">Add some trackers</button>
 </div>
 <br />
-<input type="text" id="torrent_comment" style="width: calc(100% - 60px); font-size: 22px; padding: 5px; margin-left: 20px; margin-bottom: 20px;" placeholder="Comment (optional)" oninput="TorrentParamsChanged('comment')">
+<textarea type="text" id="torrent_comment" class="input-fullwidth" style="margin-bottom: 20px; overflow: hidden;" placeholder="Comment (optional)" oninput="ResizeTextarea(this);TorrentParamsChanged('comment')"></textarea>
 <br />
-<input type="text" id="torrent_source" style="width: calc(100% - 60px); font-size: 22px; padding: 5px; margin-left: 20px; margin-bottom: 20px;" placeholder="Source (optional)" oninput="TorrentParamsChanged('source')">
+<input type="text" id="torrent_source" class="input-fullwidth" style="margin-bottom: 20px;" placeholder="Source (optional)" oninput="TorrentParamsChanged('source')">
 <br />
 
 <div id="error_text" style="display: none; font-size: 25px; color: #ff3d58; margin-left: 20px; margin-bottom: 20px;"></div>
@@ -255,6 +264,12 @@ window.addEventListener("load", function()
     request.open("GET", "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt");
     request.send();
 });
+
+function ResizeTextarea(element)
+{
+    element.style.height = "auto";
+    element.style.height = (element.scrollHeight - 10) + "px";
+}
 
 var sha1func;
 
