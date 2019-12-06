@@ -1,11 +1,14 @@
 
 let folderSelectionEnabled = false;
-let wasmEnabled = false;
+
+
+if (typeof WebAssembly === "undefined")
+    document.getElementById("no_wasm_warning")!.style.display = "";
 
 if ((<any>document.getElementById("folderchooser")).webkitdirectory === undefined)
 {
     document.getElementById("no_folder_warning")!.style.display = "block";
-    (<HTMLButtonElement>document.getElementById("folderchooserbutton")!).disabled = true;
+    (<HTMLButtonElement>document.getElementById("folderchooserbutton")).disabled = true;
 }
 else
     folderSelectionEnabled = true;
@@ -31,7 +34,7 @@ window.addEventListener("load", function()
         const trackerList = this.responseText.trim().split(/\s+/);
 
         const trackerButtonContainer = <HTMLDivElement>document.getElementById("tracker_button_container");
-        const trackersTextarea = <HTMLTextAreaElement>document.getElementById("torrent_trackers")!;
+        const trackersTextarea = <HTMLTextAreaElement>document.getElementById("torrent_trackers");
         
         for (let i = 0; i < trackerList.length; ++i)
         {
@@ -63,8 +66,6 @@ function ResizeTextarea(element: HTMLElement)
     element.style.height = (element.scrollHeight - 10) + "px";
 }
 
-let sha1func: (input: Uint8Array) => Uint8Array;
-
 function GetSizeStr(size: number)
 {
     if (size < 1024)
@@ -80,7 +81,7 @@ function GetSizeStr(size: number)
 }
 
 let allFiles: File[] | null = [];
-let singleFile: File | null;
+let singleFile: File | null = null;
 let totalSize: number;
 
 function FolderSelected(files: FileList)
@@ -304,8 +305,8 @@ function CreateTorrent()
     
     DisableElements(true);
     
-    if (wasmEnabled)
-        sharedMemoryBuffer.set(new Uint8Array(16777216), 0);
+    //if (wasmEnabled)
+    //    sharedMemoryBuffer.set(new Uint8Array(16777216), 0);
     
     if (singleFile)
         CreateFromFile(torrentObject);
@@ -454,59 +455,74 @@ function CreateFromFile(obj: TorrentObject)
     const file = singleFile;
     const fileSize = file.size;
     const readChunkSize = 16777216;
-    const pieces: number[] = [];
+    const maxChunkCount = Math.ceil(fileSize / readChunkSize);
+    const blocksPerChunk = readChunkSize / blockSize;
+    const maxBlockCount = Math.ceil(fileSize / blockSize);
+    const pieces = new Uint8Array(20 * maxBlockCount);
     infoObject["length"] = fileSize;
     let bytesReadSoFar = 0;
     let readStartIndex = 0;
-    
+
     document.getElementById("progressbar_text")!.textContent = "Reading file: " + file.name;
-    
+
     const fr = new FileReader();
-    
+
+    let currentWorkerCount = 0;
     function reader()
     {
         if (!creationInProgress)
             return;
-        
+
+        if (currentWorkerCount === maxWorkerCount)
+        {
+            waitingForWorkers = true
+            return;
+        }
+
         fr.readAsArrayBuffer(file.slice(readStartIndex, readStartIndex + readChunkSize));
         readStartIndex += readChunkSize;
     }
-    
-    fr.onload = function(ev: ProgressEvent<FileReader>)
+
+    let chunkIndex = 0;
+    let waitingForWorkers = false;
+    fr.onloadend = async function(ev)
     {
         if (!ev.target || !(ev.target.result instanceof ArrayBuffer))
             return;
 
-        const result = new Uint8Array(ev.target.result);
-        const count = Math.ceil(result.length / chunkSize);
+        ++currentWorkerCount;
+        const currentChunkIndex = chunkIndex++;
+        const bytes = new Uint8Array(ev.target.result);
+        bytesReadSoFar += bytes.length;
+        progressBarStyle.width = (bytesReadSoFar / fileSize * 100) + "%";
 
-        for (let i = 0; i < count; ++i)
+        sha1({ data: bytes, blockSize: chunkSize, readChunkSize: readChunkSize }).then(result =>
         {
-            const sha = sha1func(result.subarray(i * chunkSize, (i + 1) * chunkSize));
+            pieces.set(result, currentChunkIndex * blocksPerChunk * 20);
+            --currentWorkerCount;
 
-            for (let j = 0; j < sha.length; ++j)
-                pieces.push(sha[j]);
-        }
+            if (chunkIndex === maxChunkCount && currentWorkerCount === 0)
+            {
+                // everything finished
+                infoObject["pieces"] = Array.from(pieces);
+                Finished();
+            }
+            else if (waitingForWorkers)
+            {
+                waitingForWorkers = false;
+                reader();
+            }
+        });
 
-        bytesReadSoFar += result.length;
-
-        const progress = bytesReadSoFar / fileSize * 100;
-        progressBarStyle.width = progress + "%";
-
-        if (bytesReadSoFar < fileSize)
+        if (chunkIndex !== maxChunkCount)
             reader();
-        else
-        {
-            infoObject["pieces"] = pieces;
-            Finished();
-        }
     };
 
     fr.onerror = function()
     {
         Failed(singleFile && singleFile.name);
     };
-    
+
     reader();
 }
 
@@ -514,14 +530,17 @@ function CreateFromFolder(obj: TorrentObject)
 {
     if (!allFiles || !obj.info)
         return;
-    
+
     const progressBarStyle = document.getElementById("progressbar")!.style;
     const infoObject = obj.info;
     const chunkSize = infoObject["piece length"];
-    const pieces: number[] = [];
     let bytesReadSoFar = 0;
     const readChunkSize = 16777216;
-    
+    let currentChunk = new Uint8Array(readChunkSize);
+    let currentChunkDataIndex = 0;
+    let chunkIndex = 0;
+    const blocksPerChunk = readChunkSize / blockSize;
+
     let totalSize = 0;
     const fileInfos: TorrentFileInfo[] = [];
     for (let i = 0; i < allFiles.length; ++i)
@@ -535,88 +554,118 @@ function CreateFromFolder(obj: TorrentObject)
             "path": (<string>(<any>currentFileInfo).webkitRelativePath).split("/").slice(1)
         });
     }
-    
+
+    const blockCount = Math.ceil(totalSize / chunkSize);
+    const pieces = new Uint8Array(blockCount * 20);
+
     infoObject["files"] = fileInfos;
-    
+
     let fileIndex = 0;
     const files = allFiles;
     let currentFile = files[0];
-    
+
     const progressBarText = document.getElementById("progressbar_text")!;
-    
+
     let readStartIndex = 0;
     let fileSize = currentFile.size;
-    const buffer = new Uint8Array(chunkSize);
-    let bufferIndex = 0;
-    
+    //const buffer = new Uint8Array(chunkSize);
+    //let bufferIndex = 0;
+
     const fr = new FileReader();
-    
+
+    let currentWorkerCount = 0;
     function reader()
     {
         if (!creationInProgress)
             return;
+
+        if (currentWorkerCount === maxWorkerCount)
+        {
+            waitingForWorkers = true
+            return;
+        }
         
         fr.readAsArrayBuffer(currentFile.slice(readStartIndex, readStartIndex + readChunkSize));
+        readStartIndex += readChunkSize;
     }
-    
-    fr.onload = function(ev)
+
+    let waitingForWorkers = false;
+    fr.onloadend = async function(ev)
     {
         if (!ev.target || !(ev.target.result instanceof ArrayBuffer))
             return;
 
-        const result = new Uint8Array(ev.target.result);
-        let startIndex = 0;
-        
-        while (true)
-        {
-            const endIndex = startIndex + chunkSize - bufferIndex;
-            
-            const sliced = result.subarray(startIndex, endIndex);
-            if (sliced.length === 0)
-                break;
-            
-            buffer.set(sliced, bufferIndex);
-            
-            const readBytesCount = sliced.length;
-            if (readBytesCount + bufferIndex === chunkSize)
-            {
-                const sha = sha1func(buffer);
+        const bytes = new Uint8Array(ev.target.result);
+        bytesReadSoFar += bytes.length;
+        progressBarStyle.width = (bytesReadSoFar / totalSize * 100) + "%";
 
-                for (let i = 0; i < sha.length; ++i)
-                    pieces.push(sha[i]);
-                
-                bufferIndex = 0;
-            }
-            else
-                bufferIndex += readBytesCount;
-            
-            startIndex = endIndex;
+        if (currentChunkDataIndex + bytes.length >= readChunkSize)
+        {
+            // data doesn't fit in the current buffer, so fill the rest and create a new one
+            const byteIndex = readChunkSize - currentChunkDataIndex;
+            currentChunk.set(bytes.subarray(0, byteIndex), currentChunkDataIndex);
+            const localChunk = currentChunk;
+            currentChunk = new Uint8Array(readChunkSize);
+
+            const currentChunkIndex = chunkIndex++;
+
+            ++currentWorkerCount;
+            sha1({ data: localChunk, blockSize: chunkSize, readChunkSize: readChunkSize }).then(result =>
+            {
+                pieces.set(result, currentChunkIndex * blocksPerChunk * 20);
+                --currentWorkerCount;
+
+                if (waitingForWorkers)
+                {
+                    waitingForWorkers = false;
+                    reader();
+                }
+
+            });
+
+            // set the remaining data
+            currentChunk.set(bytes.subarray(byteIndex), 0);
+            currentChunkDataIndex = bytes.length - byteIndex;
         }
-        
-        bytesReadSoFar += result.length;
-        readStartIndex += result.length;
-        
-        const progress = bytesReadSoFar / totalSize * 100;
-        progressBarStyle.width = progress + "%";
-        
-        if (readStartIndex < fileSize)
-            reader();
         else
         {
+            // just add to the buffer
+            currentChunk.set(bytes, currentChunkDataIndex);
+            currentChunkDataIndex += bytes.length;
+        }
+
+        if (readStartIndex < fileSize)
+        {
+            // current file is not finished yet
+            reader();
+        }
+        else
+        {
+            // current file is finished, check if we have any more files left
             ++fileIndex;
-            
+
             if (fileIndex === files.length)
             {
-                const sha = sha1func(buffer.subarray(0, bufferIndex));
+                // all files are processed, calculate the hash of the current buffer data
+                if (currentChunkDataIndex !== 0)
+                {
+                    sha1({ data: currentChunk, blockSize: chunkSize, readChunkSize: currentChunkDataIndex }).then(result =>
+                    {
+                        pieces.set(result, chunkIndex * blocksPerChunk * 20);
 
-                for (let i = 0; i < sha.length; ++i)
-                    pieces.push(sha[i]);
-                
-                infoObject["pieces"] = pieces;
-                Finished();
+                        infoObject["pieces"] = Array.from(pieces);
+                        Finished();
+                    });
+                }
+                else
+                {
+                    infoObject["pieces"] = Array.from(pieces);
+                    Finished();
+                }
             }
             else
             {
+                // some files are still left
                 currentFile = files[fileIndex];
                 fileSize = currentFile.size;
                 readStartIndex = 0;
@@ -630,7 +679,7 @@ function CreateFromFolder(obj: TorrentObject)
     {
         Failed(currentFile.name);
     };
-    
+
     progressBarText.innerHTML = "Reading file: " + currentFile.name;
     reader();
 }
@@ -850,3 +899,67 @@ const Bencode =
         return result;
     }
 };
+
+let sha1: (data: Sha1Data) => Promise<Uint8Array>;
+
+interface Sha1Data
+{
+    data: Uint8Array;
+    blockSize: number;
+    readChunkSize: number;
+}
+
+// workers
+const maxWorkerCount = Math.min(navigator.hardwareConcurrency, 8); // use 8 workers at max, reading from disk will be the slowest anyways
+(() =>
+{
+    const workers: Worker[] = [];
+    for (let i = 0; i < maxWorkerCount; ++i)
+        workers.push(new Worker("dist/sha1.js"));
+
+    const busyWorkers = new Set();
+    const waitingTasks: { data: Sha1Data, callback: (param: any) => any}[] = [];
+
+    function EnqueueWorkerTask(data: Sha1Data, callback: (param: any) => any)
+    {
+        let selectedWorker: Worker | null = null;
+        let selectedIndex: number;
+        for (let i = 0; i < maxWorkerCount; ++i)
+        {
+            if (!busyWorkers.has(i))
+            {
+                selectedWorker = workers[i];
+                selectedIndex = i;
+                busyWorkers.add(i);
+                break;
+            }
+        }
+
+        if (!selectedWorker)
+        {
+            waitingTasks.push({ data, callback });
+            return;
+        }
+
+        selectedWorker.postMessage(data, [data.data.buffer]);
+
+        selectedWorker.onmessage = ev =>
+        {
+            busyWorkers.delete(selectedIndex);
+
+            if (waitingTasks.length !== 0)
+            {
+                const task = waitingTasks.shift();
+                if (task)
+                    EnqueueWorkerTask(task.data, task.callback);
+            }
+            
+            callback(ev.data);
+        };
+    }
+
+    sha1 = function(data: Sha1Data)
+    {
+        return new Promise(resolve => EnqueueWorkerTask(data, resolve));
+    };
+})();

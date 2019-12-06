@@ -1,8 +1,9 @@
 
+let sha1func: (data: Uint8Array, blockSize: number) => Uint8Array;
+
 let sharedMemoryBuffer: Uint8Array;
-if (typeof WebAssembly === "object")
+if (typeof WebAssembly !== "undefined" && false) // temporarily disabled
 {
-wasmEnabled = true;
 let sha1wasm: () => void;
 
 const nothingFunction = function() { };
@@ -38,7 +39,7 @@ WebAssembly.instantiate(wasmBytes, importObject).then(function(obj)
 });
 
 const emptyArray = new Uint8Array(20);
-sha1func = function(bytes: Uint8Array)
+sha1func = function(bytes: Uint8Array, blockSize: number)
 {
     const byteCount = bytes.length;
     
@@ -62,12 +63,12 @@ sha1func = function(bytes: Uint8Array)
     
     const ret = sharedMemoryBuffer.slice(16777220, 16777240);
     sharedMemoryBuffer.set(emptyArray, 16777220);
+
     return ret;
 }
 }
 else
 {
-    document.getElementById("no_wasm_warning")!.style.display = "";
     sha1func = sha1_unrolled;
 }
 
@@ -95,11 +96,18 @@ function sha1_unrolled(inputBytes: Uint8Array)
 
     const inputLength = inputBytes.length;
 
-    const wordArray = [];
+    let padCount = 14 - (((inputLength >> 2) + 1) & 15);
+    if (padCount < 0)
+        padCount += 16;
+
+    const totalSize = (inputLength >> 2) + 1 + padCount + 2;
+    const wordArray = new Uint32Array(totalSize);
+    let wordArrayIndex = 0;
+
     for (i = 0; i < inputLength - 3; i += 4)
     {
         const j = inputBytes[i] << 24 | inputBytes[i + 1] << 16 | inputBytes[i + 2] << 8 | inputBytes[i + 3];
-        wordArray.push(j);
+        wordArray[wordArrayIndex++] = j;
     }
 
     switch (inputLength & 3)
@@ -118,13 +126,13 @@ function sha1_unrolled(inputBytes: Uint8Array)
             break;
     }
 
-    wordArray.push(i);
+    wordArray[wordArrayIndex++] = i;
 
-    while ((wordArray.length & 15) !== 14)
-        wordArray.push(0);
+    while ((wordArrayIndex & 15) !== 14)
+        wordArray[wordArrayIndex++] = 0;
 
-    wordArray.push(inputLength >>> 29);
-    wordArray.push((inputLength << 3) & 0x0ffffffff);
+    wordArray[wordArrayIndex++] = inputLength >>> 29;
+    wordArray[wordArrayIndex++] = (inputLength << 3) & 0x0ffffffff;
 
     for (let blockstart = 0; blockstart < wordArray.length; blockstart += 16)
     {
@@ -771,3 +779,29 @@ function sha1_unrolled(inputBytes: Uint8Array)
 
     return new Uint8Array(convert_hex(H0).concat(convert_hex(H1), convert_hex(H2), convert_hex(H3), convert_hex(H4)));
 }
+
+function PostMessage(message: any, transfer?: Transferable[] | undefined)
+{
+    // hack for typescript without web worker lib
+    postMessage(message, <any>transfer);
+}
+
+onmessage = ev =>
+{
+    const data = <Sha1Data>ev.data;
+    const array = data.data;
+    const blockSize = data.blockSize;
+    const maxSize = data.readChunkSize;
+    let remainingBytes = Math.min(maxSize, array.length);
+    const blockCount = Math.ceil(remainingBytes / blockSize);
+    const result = new Uint8Array(20 * blockCount); // 20 bytes per sha1
+
+    for (let idx = 0, i = 0; remainingBytes > 0; idx += blockSize, ++i)
+    {
+        const current = sha1func(array.subarray(idx, idx + Math.min(blockSize, remainingBytes)), blockSize);
+        remainingBytes -= blockSize;
+        result.set(current, 20 * i);
+    }
+
+    PostMessage(result, [result.buffer]);
+};
