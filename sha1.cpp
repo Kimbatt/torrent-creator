@@ -1,7 +1,13 @@
 
 //#include <iostream>
-#include <cstdint>
-#include <cstring>
+//#include <cstdint>
+//#include <cstring>
+
+typedef unsigned long long size_t;
+typedef unsigned char uint8_t;
+typedef unsigned int uint32_t;
+typedef int int32_t;
+
 extern "C"
 {
 void sha1(uint8_t* memory_buffer)
@@ -55,33 +61,30 @@ void sha1(uint8_t* memory_buffer)
 
     word_array[word_count++] = i;
 
-    memset(&word_array[word_count], 0, padCount * 4 /*sizeof(uint32_t)*/);
-    word_count += padCount;
-    //for (i = 0; i < padCount; ++i)
-    //    word_array[word_count++] = 0;
+    for (i = 0; i < padCount; ++i)
+       word_array[word_count++] = 0;
 
     word_array[word_count++] = length >> 29;
     word_array[word_count] = (length << 3) & 0x0ffffffff;
 
     for (blockstart = 0; blockstart < total_size; blockstart += 16)
     {
-        memcpy(W, &word_array[blockstart], 16 * 4);
-        //W[0] = word_array[blockstart];
-        //W[1] = word_array[blockstart + 1];
-        //W[2] = word_array[blockstart + 2];
-        //W[3] = word_array[blockstart + 3];
-        //W[4] = word_array[blockstart + 4];
-        //W[5] = word_array[blockstart + 5];
-        //W[6] = word_array[blockstart + 6];
-        //W[7] = word_array[blockstart + 7];
-        //W[8] = word_array[blockstart + 8];
-        //W[9] = word_array[blockstart + 9];
-        //W[10] = word_array[blockstart + 10];
-        //W[11] = word_array[blockstart + 11];
-        //W[12] = word_array[blockstart + 12];
-        //W[13] = word_array[blockstart + 13];
-        //W[14] = word_array[blockstart + 14];
-        //W[15] = word_array[blockstart + 15];
+        W[0] = word_array[blockstart];
+        W[1] = word_array[blockstart + 1];
+        W[2] = word_array[blockstart + 2];
+        W[3] = word_array[blockstart + 3];
+        W[4] = word_array[blockstart + 4];
+        W[5] = word_array[blockstart + 5];
+        W[6] = word_array[blockstart + 6];
+        W[7] = word_array[blockstart + 7];
+        W[8] = word_array[blockstart + 8];
+        W[9] = word_array[blockstart + 9];
+        W[10] = word_array[blockstart + 10];
+        W[11] = word_array[blockstart + 11];
+        W[12] = word_array[blockstart + 12];
+        W[13] = word_array[blockstart + 13];
+        W[14] = word_array[blockstart + 14];
+        W[15] = word_array[blockstart + 15];
 
         n = W[13] ^ W[8] ^ W[2] ^ W[0];
         W[16] = ((n << 1) | (n >> 31));

@@ -1,6 +1,14 @@
 
-let folderSelectionEnabled = false;
+if (typeof Worker === "undefined")
+{
+    document.getElementById("no_worker_warning")!.style.display = "";
+    document.getElementById("page")!.style.display = "none";
 
+    // just exit here
+    throw new Error();
+}
+
+let folderSelectionEnabled = false;
 
 if (typeof WebAssembly === "undefined")
     document.getElementById("no_wasm_warning")!.style.display = "";
@@ -301,6 +309,7 @@ function CreateTorrent()
     torrentChanged = false;
     creationInProgress = true;
     document.getElementById("progressbar_container")!.className = "progress-bar-visible";
+    document.getElementById("progressbar_processing_container")!.className = "progress-bar-visible";
     document.getElementById("create_torrent_button")!.textContent = "Cancel";
     
     DisableElements(true);
@@ -397,6 +406,9 @@ function Finished()
     }
     
     document.getElementById("progressbar_text")!.textContent = "Done";
+    document.getElementById("progressbar")!.style.width = "100%";
+    document.getElementById("progressbar_processing_text")!.textContent = "Done";
+    document.getElementById("progressbar_processing")!.style.width = "100%";
     creationInProgress = false;
     DisableElements(false);
 }
@@ -410,6 +422,10 @@ function Failed(fileName: string | null)
     const progressBar = document.getElementById("progressbar")!;
     progressBar.style.display = "none";
     progressBar.style.width = "0%";
+
+    const progressBarProcessing = document.getElementById("progressbar_processing")!;
+    progressBarProcessing.style.display = "none";
+    progressBarProcessing.style.width = "0%";
     
     Cancel();
 }
@@ -419,8 +435,12 @@ function Cancel()
     creationInProgress = false;
     document.getElementById("create_torrent_button")!.textContent = "Create torrent";
     document.getElementById("progressbar_container")!.className = "progress-bar-hidden";
+    document.getElementById("progressbar_processing_container")!.className = "progress-bar-hidden";
     document.getElementById("progressbar_text")!.textContent = "";
     document.getElementById("progressbar")!.style.width = "0%";
+    document.getElementById("progressbar_processing_container")!.className = "progress-bar-hidden";
+    document.getElementById("progressbar_processing_text")!.textContent = "";
+    document.getElementById("progressbar_processing")!.style.width = "0%";
     DisableElements(false);
 }
 
@@ -449,6 +469,9 @@ function CreateFromFile(obj: TorrentObject)
         return;
 
     const progressBarStyle = document.getElementById("progressbar")!.style;
+    progressBarStyle.width = "0%";
+    const progressBarProcessingStyle = document.getElementById("progressbar_processing")!.style;
+    progressBarProcessingStyle.width = "0%";
     const infoObject = obj.info;
     const chunkSize = infoObject["piece length"];
 
@@ -462,8 +485,13 @@ function CreateFromFile(obj: TorrentObject)
     infoObject["length"] = fileSize;
     let bytesReadSoFar = 0;
     let readStartIndex = 0;
+    let bytesProcessedSoFar = 0;
 
-    document.getElementById("progressbar_text")!.textContent = "Reading file: " + file.name;
+    const progressBarText = document.getElementById("progressbar_text")!;
+    progressBarText.textContent = "Reading file: " + file.name;
+
+    const progressBarProcessingText = document.getElementById("progressbar_processing_text")!;
+    progressBarProcessingText.textContent = "Processing: 0%";
 
     const fr = new FileReader();
 
@@ -493,13 +521,19 @@ function CreateFromFile(obj: TorrentObject)
         ++currentWorkerCount;
         const currentChunkIndex = chunkIndex++;
         const bytes = new Uint8Array(ev.target.result);
-        bytesReadSoFar += bytes.length;
+        const byteCount = bytes.length;
+        bytesReadSoFar += byteCount;
         progressBarStyle.width = (bytesReadSoFar / fileSize * 100) + "%";
 
         sha1({ data: bytes, blockSize: chunkSize, readChunkSize: readChunkSize }).then(result =>
         {
             pieces.set(result, currentChunkIndex * blocksPerChunk * 20);
             --currentWorkerCount;
+
+            bytesProcessedSoFar += byteCount;
+            const percent = bytesProcessedSoFar / fileSize * 100;
+            progressBarProcessingStyle.width = percent + "%";
+            progressBarProcessingText.textContent = "Processing: " + percent.toFixed(2) + "%";
 
             if (chunkIndex === maxChunkCount && currentWorkerCount === 0)
             {
@@ -512,10 +546,16 @@ function CreateFromFile(obj: TorrentObject)
                 waitingForWorkers = false;
                 reader();
             }
+
         });
 
         if (chunkIndex !== maxChunkCount)
             reader();
+        else
+        {
+            // finished reading
+            progressBarText.textContent = "File reading finished";
+        }
     };
 
     fr.onerror = function()
@@ -532,9 +572,13 @@ function CreateFromFolder(obj: TorrentObject)
         return;
 
     const progressBarStyle = document.getElementById("progressbar")!.style;
+    progressBarStyle.width = "0%";
+    const progressBarProcessingStyle = document.getElementById("progressbar_processing")!.style;
+    progressBarProcessingStyle.width = "0%";
     const infoObject = obj.info;
     const chunkSize = infoObject["piece length"];
     let bytesReadSoFar = 0;
+    let bytesProcessedSoFar = 0;
     const readChunkSize = 16777216;
     let currentChunk = new Uint8Array(readChunkSize);
     let currentChunkDataIndex = 0;
@@ -555,8 +599,9 @@ function CreateFromFolder(obj: TorrentObject)
         });
     }
 
-    const blockCount = Math.ceil(totalSize / chunkSize);
-    const pieces = new Uint8Array(blockCount * 20);
+    const totalBlockCount = Math.ceil(totalSize / chunkSize);
+    const pieces = new Uint8Array(totalBlockCount * 20);
+    let processedBlockCount = 0;
 
     infoObject["files"] = fileInfos;
 
@@ -565,11 +610,10 @@ function CreateFromFolder(obj: TorrentObject)
     let currentFile = files[0];
 
     const progressBarText = document.getElementById("progressbar_text")!;
+    const progressBarProcessingText = document.getElementById("progressbar_processing_text")!;
 
     let readStartIndex = 0;
     let fileSize = currentFile.size;
-    //const buffer = new Uint8Array(chunkSize);
-    //let bufferIndex = 0;
 
     const fr = new FileReader();
 
@@ -589,6 +633,15 @@ function CreateFromFolder(obj: TorrentObject)
         readStartIndex += readChunkSize;
     }
 
+    function MaybeFinished()
+    {
+        if (processedBlockCount >= totalBlockCount)
+        {
+            infoObject["pieces"] = Array.from(pieces);
+            Finished();
+        }
+    }
+
     let waitingForWorkers = false;
     fr.onloadend = async function(ev)
     {
@@ -596,7 +649,8 @@ function CreateFromFolder(obj: TorrentObject)
             return;
 
         const bytes = new Uint8Array(ev.target.result);
-        bytesReadSoFar += bytes.length;
+        const byteCount = bytes.length;
+        bytesReadSoFar += byteCount;
         progressBarStyle.width = (bytesReadSoFar / totalSize * 100) + "%";
 
         if (currentChunkDataIndex + bytes.length >= readChunkSize)
@@ -612,6 +666,7 @@ function CreateFromFolder(obj: TorrentObject)
             ++currentWorkerCount;
             sha1({ data: localChunk, blockSize: chunkSize, readChunkSize: readChunkSize }).then(result =>
             {
+                processedBlockCount += blocksPerChunk;
                 pieces.set(result, currentChunkIndex * blocksPerChunk * 20);
                 --currentWorkerCount;
 
@@ -621,6 +676,15 @@ function CreateFromFolder(obj: TorrentObject)
                     reader();
                 }
 
+                if (!creationFinished)
+                {
+                    bytesProcessedSoFar += readChunkSize;
+                    const percent = bytesProcessedSoFar / totalSize * 100;
+                    progressBarProcessingStyle.width = percent + "%";
+                    progressBarProcessingText.textContent = "Processing: " + percent.toFixed(2) + "%";
+                }
+
+                MaybeFinished();
             });
 
             // set the remaining data
@@ -651,17 +715,15 @@ function CreateFromFolder(obj: TorrentObject)
                 {
                     sha1({ data: currentChunk, blockSize: chunkSize, readChunkSize: currentChunkDataIndex }).then(result =>
                     {
+                        processedBlockCount += blocksPerChunk;
                         pieces.set(result, chunkIndex * blocksPerChunk * 20);
-
-                        infoObject["pieces"] = Array.from(pieces);
-                        Finished();
+                        MaybeFinished();
                     });
                 }
                 else
-                {
-                    infoObject["pieces"] = Array.from(pieces);
-                    Finished();
-                }
+                    MaybeFinished();
+
+                progressBarText.textContent = "All files read";
             }
             else
             {
@@ -681,6 +743,7 @@ function CreateFromFolder(obj: TorrentObject)
     };
 
     progressBarText.innerHTML = "Reading file: " + currentFile.name;
+    progressBarProcessingText.textContent = "Processing: 0%";
     reader();
 }
 
@@ -910,7 +973,7 @@ interface Sha1Data
 }
 
 // workers
-const maxWorkerCount = Math.min(navigator.hardwareConcurrency, 8); // use 8 workers at max, reading from disk will be the slowest anyways
+const maxWorkerCount = Math.min(navigator.hardwareConcurrency || 1, 8); // use 8 workers at max, reading from disk will be the slowest anyways
 (() =>
 {
     const workers: Worker[] = [];
@@ -963,3 +1026,17 @@ const maxWorkerCount = Math.min(navigator.hardwareConcurrency, 8); // use 8 work
         return new Promise(resolve => EnqueueWorkerTask(data, resolve));
     };
 })();
+
+// Array.from polyfill
+if (typeof Array.from === "undefined")
+{
+    Array.from = function<T>(arrayLike: ArrayLike<T>)
+    {
+        const len = arrayLike.length;
+        const ret = new Array<T>(len);
+        for (let i = 0; i < len; ++i)
+            ret[i] = arrayLike[i];
+
+        return ret;
+    };
+}

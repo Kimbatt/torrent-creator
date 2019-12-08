@@ -48,6 +48,12 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
+if (typeof Worker === "undefined") {
+    document.getElementById("no_worker_warning").style.display = "";
+    document.getElementById("page").style.display = "none";
+    // just exit here
+    throw new Error();
+}
 var folderSelectionEnabled = false;
 if (typeof WebAssembly === "undefined")
     document.getElementById("no_wasm_warning").style.display = "";
@@ -247,6 +253,7 @@ function CreateTorrent() {
     torrentChanged = false;
     creationInProgress = true;
     document.getElementById("progressbar_container").className = "progress-bar-visible";
+    document.getElementById("progressbar_processing_container").className = "progress-bar-visible";
     document.getElementById("create_torrent_button").textContent = "Cancel";
     DisableElements(true);
     //if (wasmEnabled)
@@ -315,6 +322,9 @@ function Finished() {
         };
     }
     document.getElementById("progressbar_text").textContent = "Done";
+    document.getElementById("progressbar").style.width = "100%";
+    document.getElementById("progressbar_processing_text").textContent = "Done";
+    document.getElementById("progressbar_processing").style.width = "100%";
     creationInProgress = false;
     DisableElements(false);
 }
@@ -325,14 +335,21 @@ function Failed(fileName) {
     var progressBar = document.getElementById("progressbar");
     progressBar.style.display = "none";
     progressBar.style.width = "0%";
+    var progressBarProcessing = document.getElementById("progressbar_processing");
+    progressBarProcessing.style.display = "none";
+    progressBarProcessing.style.width = "0%";
     Cancel();
 }
 function Cancel() {
     creationInProgress = false;
     document.getElementById("create_torrent_button").textContent = "Create torrent";
     document.getElementById("progressbar_container").className = "progress-bar-hidden";
+    document.getElementById("progressbar_processing_container").className = "progress-bar-hidden";
     document.getElementById("progressbar_text").textContent = "";
     document.getElementById("progressbar").style.width = "0%";
+    document.getElementById("progressbar_processing_container").className = "progress-bar-hidden";
+    document.getElementById("progressbar_processing_text").textContent = "";
+    document.getElementById("progressbar_processing").style.width = "0%";
     DisableElements(false);
 }
 function DisableElements(disable) {
@@ -354,6 +371,9 @@ function CreateFromFile(obj) {
     if (!singleFile || !obj.info)
         return;
     var progressBarStyle = document.getElementById("progressbar").style;
+    progressBarStyle.width = "0%";
+    var progressBarProcessingStyle = document.getElementById("progressbar_processing").style;
+    progressBarProcessingStyle.width = "0%";
     var infoObject = obj.info;
     var chunkSize = infoObject["piece length"];
     var file = singleFile;
@@ -366,7 +386,11 @@ function CreateFromFile(obj) {
     infoObject["length"] = fileSize;
     var bytesReadSoFar = 0;
     var readStartIndex = 0;
-    document.getElementById("progressbar_text").textContent = "Reading file: " + file.name;
+    var bytesProcessedSoFar = 0;
+    var progressBarText = document.getElementById("progressbar_text");
+    progressBarText.textContent = "Reading file: " + file.name;
+    var progressBarProcessingText = document.getElementById("progressbar_processing_text");
+    progressBarProcessingText.textContent = "Processing: 0%";
     var fr = new FileReader();
     var currentWorkerCount = 0;
     function reader() {
@@ -383,18 +407,23 @@ function CreateFromFile(obj) {
     var waitingForWorkers = false;
     fr.onloadend = function (ev) {
         return __awaiter(this, void 0, void 0, function () {
-            var currentChunkIndex, bytes;
+            var currentChunkIndex, bytes, byteCount;
             return __generator(this, function (_a) {
                 if (!ev.target || !(ev.target.result instanceof ArrayBuffer))
                     return [2 /*return*/];
                 ++currentWorkerCount;
                 currentChunkIndex = chunkIndex++;
                 bytes = new Uint8Array(ev.target.result);
-                bytesReadSoFar += bytes.length;
+                byteCount = bytes.length;
+                bytesReadSoFar += byteCount;
                 progressBarStyle.width = (bytesReadSoFar / fileSize * 100) + "%";
                 sha1({ data: bytes, blockSize: chunkSize, readChunkSize: readChunkSize }).then(function (result) {
                     pieces.set(result, currentChunkIndex * blocksPerChunk * 20);
                     --currentWorkerCount;
+                    bytesProcessedSoFar += byteCount;
+                    var percent = bytesProcessedSoFar / fileSize * 100;
+                    progressBarProcessingStyle.width = percent + "%";
+                    progressBarProcessingText.textContent = "Processing: " + percent.toFixed(2) + "%";
                     if (chunkIndex === maxChunkCount && currentWorkerCount === 0) {
                         // everything finished
                         infoObject["pieces"] = Array.from(pieces);
@@ -407,6 +436,10 @@ function CreateFromFile(obj) {
                 });
                 if (chunkIndex !== maxChunkCount)
                     reader();
+                else {
+                    // finished reading
+                    progressBarText.textContent = "File reading finished";
+                }
                 return [2 /*return*/];
             });
         });
@@ -420,9 +453,13 @@ function CreateFromFolder(obj) {
     if (!allFiles || !obj.info)
         return;
     var progressBarStyle = document.getElementById("progressbar").style;
+    progressBarStyle.width = "0%";
+    var progressBarProcessingStyle = document.getElementById("progressbar_processing").style;
+    progressBarProcessingStyle.width = "0%";
     var infoObject = obj.info;
     var chunkSize = infoObject["piece length"];
     var bytesReadSoFar = 0;
+    var bytesProcessedSoFar = 0;
     var readChunkSize = 16777216;
     var currentChunk = new Uint8Array(readChunkSize);
     var currentChunkDataIndex = 0;
@@ -439,17 +476,17 @@ function CreateFromFolder(obj) {
             "path": currentFileInfo.webkitRelativePath.split("/").slice(1)
         });
     }
-    var blockCount = Math.ceil(totalSize / chunkSize);
-    var pieces = new Uint8Array(blockCount * 20);
+    var totalBlockCount = Math.ceil(totalSize / chunkSize);
+    var pieces = new Uint8Array(totalBlockCount * 20);
+    var processedBlockCount = 0;
     infoObject["files"] = fileInfos;
     var fileIndex = 0;
     var files = allFiles;
     var currentFile = files[0];
     var progressBarText = document.getElementById("progressbar_text");
+    var progressBarProcessingText = document.getElementById("progressbar_processing_text");
     var readStartIndex = 0;
     var fileSize = currentFile.size;
-    //const buffer = new Uint8Array(chunkSize);
-    //let bufferIndex = 0;
     var fr = new FileReader();
     var currentWorkerCount = 0;
     function reader() {
@@ -462,15 +499,22 @@ function CreateFromFolder(obj) {
         fr.readAsArrayBuffer(currentFile.slice(readStartIndex, readStartIndex + readChunkSize));
         readStartIndex += readChunkSize;
     }
+    function MaybeFinished() {
+        if (processedBlockCount >= totalBlockCount) {
+            infoObject["pieces"] = Array.from(pieces);
+            Finished();
+        }
+    }
     var waitingForWorkers = false;
     fr.onloadend = function (ev) {
         return __awaiter(this, void 0, void 0, function () {
-            var bytes, byteIndex, localChunk, currentChunkIndex_1;
+            var bytes, byteCount, byteIndex, localChunk, currentChunkIndex_1;
             return __generator(this, function (_a) {
                 if (!ev.target || !(ev.target.result instanceof ArrayBuffer))
                     return [2 /*return*/];
                 bytes = new Uint8Array(ev.target.result);
-                bytesReadSoFar += bytes.length;
+                byteCount = bytes.length;
+                bytesReadSoFar += byteCount;
                 progressBarStyle.width = (bytesReadSoFar / totalSize * 100) + "%";
                 if (currentChunkDataIndex + bytes.length >= readChunkSize) {
                     byteIndex = readChunkSize - currentChunkDataIndex;
@@ -480,12 +524,20 @@ function CreateFromFolder(obj) {
                     currentChunkIndex_1 = chunkIndex++;
                     ++currentWorkerCount;
                     sha1({ data: localChunk, blockSize: chunkSize, readChunkSize: readChunkSize }).then(function (result) {
+                        processedBlockCount += blocksPerChunk;
                         pieces.set(result, currentChunkIndex_1 * blocksPerChunk * 20);
                         --currentWorkerCount;
                         if (waitingForWorkers) {
                             waitingForWorkers = false;
                             reader();
                         }
+                        if (!creationFinished) {
+                            bytesProcessedSoFar += readChunkSize;
+                            var percent = bytesProcessedSoFar / totalSize * 100;
+                            progressBarProcessingStyle.width = percent + "%";
+                            progressBarProcessingText.textContent = "Processing: " + percent.toFixed(2) + "%";
+                        }
+                        MaybeFinished();
                     });
                     // set the remaining data
                     currentChunk.set(bytes.subarray(byteIndex), 0);
@@ -507,15 +559,14 @@ function CreateFromFolder(obj) {
                         // all files are processed, calculate the hash of the current buffer data
                         if (currentChunkDataIndex !== 0) {
                             sha1({ data: currentChunk, blockSize: chunkSize, readChunkSize: currentChunkDataIndex }).then(function (result) {
+                                processedBlockCount += blocksPerChunk;
                                 pieces.set(result, chunkIndex * blocksPerChunk * 20);
-                                infoObject["pieces"] = Array.from(pieces);
-                                Finished();
+                                MaybeFinished();
                             });
                         }
-                        else {
-                            infoObject["pieces"] = Array.from(pieces);
-                            Finished();
-                        }
+                        else
+                            MaybeFinished();
+                        progressBarText.textContent = "All files read";
                     }
                     else {
                         // some files are still left
@@ -534,6 +585,7 @@ function CreateFromFolder(obj) {
         Failed(currentFile.name);
     };
     progressBarText.innerHTML = "Reading file: " + currentFile.name;
+    progressBarProcessingText.textContent = "Processing: 0%";
     reader();
 }
 // bencode
@@ -699,7 +751,7 @@ var Bencode = {
 };
 var sha1;
 // workers
-var maxWorkerCount = Math.min(navigator.hardwareConcurrency, 8); // use 8 workers at max, reading from disk will be the slowest anyways
+var maxWorkerCount = Math.min(navigator.hardwareConcurrency || 1, 8); // use 8 workers at max, reading from disk will be the slowest anyways
 (function () {
     var workers = [];
     for (var i = 0; i < maxWorkerCount; ++i)
@@ -736,3 +788,13 @@ var maxWorkerCount = Math.min(navigator.hardwareConcurrency, 8); // use 8 worker
         return new Promise(function (resolve) { return EnqueueWorkerTask(data, resolve); });
     };
 })();
+// Array.from polyfill
+if (typeof Array.from === "undefined") {
+    Array.from = function (arrayLike) {
+        var len = arrayLike.length;
+        var ret = new Array(len);
+        for (var i = 0; i < len; ++i)
+            ret[i] = arrayLike[i];
+        return ret;
+    };
+}
