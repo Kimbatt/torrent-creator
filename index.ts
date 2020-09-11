@@ -38,12 +38,12 @@ window.addEventListener("load", function()
 
         if (this.readyState !== 4 || (this.status !== 200 && this.status !== 0))
             return;
-        
+
         const trackerList = this.responseText.trim().split(/\s+/);
 
         const trackerButtonContainer = <HTMLDivElement>document.getElementById("tracker_button_container");
         const trackersTextarea = <HTMLTextAreaElement>document.getElementById("torrent_trackers");
-        
+
         for (let i = 0; i < trackerList.length; ++i)
         {
             const currentTracker = trackerList[i];
@@ -55,15 +55,15 @@ window.addEventListener("load", function()
                 currentButton.classList.add("tracker-list-element-hidden");
                 trackersTextarea.value += currentTracker + "\n";
             };
-            
+
             trackerButtonContainer.appendChild(currentButton);
         }
-        
+
         const button = <HTMLButtonElement>document.getElementById("tracker_add_button");
         button.style.visibility = "visible";
         button.style.opacity = "1";
     };
-    
+
     request.open("GET", "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt");
     request.send();
 });
@@ -74,17 +74,25 @@ function ResizeTextarea(element: HTMLElement)
     element.style.height = (element.scrollHeight - 10) + "px";
 }
 
+function FormatTextareLines(element: HTMLTextAreaElement, resizeTextArea: boolean = true)
+{
+    element.value = element.value.split(/\s+/g).filter(str => str.length !== 0).join("\n");
+
+    if (resizeTextArea)
+        ResizeTextarea(element);
+}
+
 function GetSizeStr(size: number)
 {
     if (size < 1024)
         return size + " bytes";
-    
+
     if (size < 1048576)
         return ((size / 1024) | 0) + " kB";
-    
+
     if (size < 1073741824)
         return ((size / 1048576) | 0) + " MB";
-    
+
     return (size / 1073741824).toFixed(2) + " GB";
 }
 
@@ -96,7 +104,7 @@ function FolderSelected(files: FileList)
 {
     const folderName = (<string>((<any>files[0]).webkitRelativePath)).split("/")[0];
     (<HTMLInputElement>document.getElementById("torrent_name")).value = folderName;
-    
+
     allFiles = [];
     totalSize = 0;
     for (let i = 0; i < files.length; ++i)
@@ -104,11 +112,11 @@ function FolderSelected(files: FileList)
         allFiles.push(files[i]);
         totalSize += files[i].size;
     }
-    
+
     document.getElementById("selected_file_info")!.textContent = "Selected folder: " + folderName + " (" + GetSizeStr(totalSize) + ")";
     singleFile = null;
     (<HTMLButtonElement>document.getElementById("create_torrent_button")).disabled = false;
-    
+
     ResetCreateButton();
 }
 
@@ -121,7 +129,7 @@ function FileSelected(files: FileList)
     document.getElementById("selected_file_info")!.textContent = "Selected file: " + fileName + " (" + GetSizeStr(totalSize) + ")";
     allFiles = null;
     (<HTMLButtonElement>document.getElementById("create_torrent_button")).disabled = false;
-    
+
     ResetCreateButton();
 }
 
@@ -136,7 +144,7 @@ function TorrentParamsChanged(type: string)
         default:
             break;
     }
-    
+
     torrentChanged = true;
 }
 
@@ -145,9 +153,9 @@ function ShowTrackers(show: boolean)
 {
     if (show === trackersOverlayVisible)
         return;
-    
+
     trackersOverlayVisible = show;
-    
+
     if (show)
     {
         const buttonContainer = document.getElementById("tracker_button_container")!.children;
@@ -157,7 +165,7 @@ function ShowTrackers(show: boolean)
                 buttonContainer[i].classList.remove("tracker-list-element-hidden");
         }
     }
-    
+
     const overlay = document.getElementById("trackers_list_overlay")!;
     overlay.style.transition = show ? "visibility 0s, opacity 0.15s ease-out" : "visibility 0s 0.15s, opacity 0.15s ease-in";
     overlay.style.visibility = show ? "visible" : "hidden";
@@ -192,6 +200,7 @@ interface TorrentObject
     info: TorrentInfo | null;
     announce?: string;
     "announce-list"?: string[][];
+    "url-list"?: string[];
     "creation date"?: number;
     "created by"?: string;
     comment?: string;
@@ -211,21 +220,21 @@ function SetTorrentData()
         errorTextDiv.style.display = "";
         return false;
     }
-    
+
     if (torrentName.match(/[<>:\"\\\/\|\?\*]/))
     {
         errorTextDiv.innerHTML = "Torrent name cannot contain any of the following characters: < > : \\ / | ? *";
         errorTextDiv.style.display = "";
         return false;
     }
-    
+
     if (torrentName.length > 255)
     {
         errorTextDiv.innerHTML = "Torrent name cannot be longer than 255 characters";
         errorTextDiv.style.display = "";
         return false;
     }
-    
+
     const trackers = (<HTMLTextAreaElement>document.getElementById("torrent_trackers")).value.split("\n");
     const okTrackers: { [key: string]: boolean } = {};
     for (let i = 0; i < trackers.length; ++i)
@@ -233,7 +242,7 @@ function SetTorrentData()
         const current = trackers[i].trim();
         if (current === "")
             continue;
-        
+
         if (current.match(/.+:\/\/([a-z0-9-]+\.)*([a-z0-9-]+):\d+((\/.*)\/announce)?/))
             okTrackers[current] = true;
         else
@@ -243,7 +252,7 @@ function SetTorrentData()
             return false;
         }
     }
-    
+
     const infoObject: TorrentInfo = (torrentObject && torrentObject["info"]) || { name: "", pieces: "", "piece length": 0, length: 0 };
     torrentObject = { "info": infoObject };
 
@@ -254,43 +263,47 @@ function SetTorrentData()
         const announceList: string[][] = [];
         for (let i = 0; i < okTrackersList.length; ++i)
             announceList.push([okTrackersList[i]]);
-        
+
         torrentObject["announce-list"] = announceList;
     }
-    
+
+    const webSeeds = (<HTMLTextAreaElement>document.getElementById("torrent_webseeds")).value.split(/\s+/).filter(str => str.length !== 0);
+    if (webSeeds.length !== 0)
+        torrentObject["url-list"] = webSeeds;
+
     const comment = (<HTMLTextAreaElement>document.getElementById("torrent_comment")).value;
     if (comment !== "")
         torrentObject["comment"] = comment;
-    
+
     if ((<HTMLInputElement>document.getElementById("torrent_creation_date")).checked)
         torrentObject["creation date"] = (Date.now() / 1000) | 0;
-    
+
     torrentObject["created by"] = "kimbatt.github.io/torrent-creator";
-    
+
     if ((<HTMLInputElement>document.getElementById("torrent_is_private")).checked)
         infoObject["private"] = 1;
-    
+
     infoObject["name"] = torrentName;
     const blockSizeComboBox = <HTMLSelectElement>document.getElementById("torrent_block_size");
     blockSize = Number(blockSizeComboBox.options[blockSizeComboBox.selectedIndex].value);
     if (blockSize === 0 || isNaN(blockSize))
     {
         let factor = Math.round(Math.log(totalSize / 1200) / Math.log(2));
-        
+
         if (factor < 14)
             factor = 14;
         else if (factor > 24)
             factor = 24;
-        
+
         blockSize = 1 << factor;
     }
-    
+
     infoObject["piece length"] = blockSize;
-    
+
     const source = (<HTMLInputElement>document.getElementById("torrent_source")).value;
     if (source !== "")
         infoObject["source"] = source;
-    
+
     errorTextDiv.style.display = "none";
     return true;
 }
@@ -302,21 +315,21 @@ function CreateTorrent()
         Cancel();
         return;
     }
-    
+
     if (!SetTorrentData() || !torrentObject)
         return;
-    
+
     torrentChanged = false;
     creationInProgress = true;
     document.getElementById("progressbar_container")!.className = "progress-bar-visible";
     document.getElementById("progressbar_processing_container")!.className = "progress-bar-visible";
     document.getElementById("create_torrent_button")!.textContent = "Cancel";
-    
+
     DisableElements(true);
-    
+
     //if (wasmEnabled)
     //    sharedMemoryBuffer.set(new Uint8Array(16777216), 0);
-    
+
     if (singleFile)
         CreateFromFile(torrentObject);
     else if (allFiles)
@@ -327,11 +340,11 @@ function ResetCreateButton()
 {
     if (!creationFinished)
         return;
-    
+
     creationFinished = false;
     torrentChanged = false;
     torrentObject = null;
-    
+
     const button = <HTMLButtonElement>document.getElementById("create_torrent_button");
     button.onclick = CreateTorrent;
     Cancel();
@@ -344,14 +357,14 @@ function Finished()
 
     if (!torrentObject || !torrentObject.info)
         return;
-    
+
     const pieceBytes = <number[]>torrentObject.info["pieces"];
     let pieceStr = "";
     for (let i = 0; i < pieceBytes.length; ++i)
         pieceStr += String.fromCharCode(pieceBytes[i]);
-    
+
     torrentObject.info["pieces"] = pieceStr;
-    
+
     let blob = new Blob();
 
     function UpdateBlob()
@@ -375,7 +388,7 @@ function Finished()
 
                 UpdateBlob();
             }
-            
+
             if (torrentObject && torrentObject.info)
                 window.navigator.msSaveOrOpenBlob(blob, torrentObject.info.name + ".torrent");
         };
@@ -393,18 +406,18 @@ function Finished()
             {
                 if (!SetTorrentData() || !torrentObject || !torrentObject.info)
                     return;
-                
+
                 UpdateBlob();
                 a.download = torrentObject.info.name + ".torrent";
                 window.URL.revokeObjectURL(blobUrl);
                 blobUrl = window.URL.createObjectURL(blob);
                 a.href = blobUrl;
             }
-            
+
             a.click();
         };
     }
-    
+
     document.getElementById("progressbar_text")!.textContent = "Done";
     document.getElementById("progressbar")!.style.width = "100%";
     document.getElementById("progressbar_processing_text")!.textContent = "Done";
@@ -426,7 +439,7 @@ function Failed(fileName: string | null)
     const progressBarProcessing = document.getElementById("progressbar_processing")!;
     progressBarProcessing.style.display = "none";
     progressBarProcessing.style.width = "0%";
-    
+
     Cancel();
 }
 
@@ -628,7 +641,7 @@ function CreateFromFolder(obj: TorrentObject)
             waitingForWorkers = true
             return;
         }
-        
+
         fr.readAsArrayBuffer(currentFile.slice(readStartIndex, readStartIndex + readChunkSize));
         readStartIndex += readChunkSize;
     }
@@ -790,7 +803,7 @@ function stringByteCount(str: string)
             count += 4;
         }
     }
-    
+
     return count;
 }
 
@@ -799,7 +812,7 @@ function toByteArray(str: string)
     const ret = [];
     for (let i = 0; i < str.length; ++i)
         ret.push(str.charCodeAt(i));
-    
+
     return ret;
 }
 
@@ -855,7 +868,7 @@ class BencodeDict extends BencodeObject
         array.push.apply(array, toByteArray(bytesCount.toString()));
         array.push(":".charCodeAt(0));
         const strBytes = toByteArray(str);
-        
+
         for (let i = 0; i < strBytes.length; ++i)
             array.push(strBytes[i]);
     }
@@ -865,7 +878,7 @@ class BencodeDict extends BencodeObject
         array.push("d".charCodeAt(0));
 
         const sortedKeys = Object.keys(this.data).sort();
-        
+
         for (let i = 0; i < sortedKeys.length; ++i)
         {
             const currentKey = sortedKeys[i];
@@ -908,7 +921,7 @@ class BencodeList extends BencodeObject
     encode(array: number[])
     {
         array.push("l".charCodeAt(0));
-        
+
         for (let i = 0; i < this.data.length; ++i)
             this.data[i].encode(array);
 
@@ -981,7 +994,7 @@ const maxWorkerCount = Math.min(navigator.hardwareConcurrency || 1, 8); // use 8
         workers.push(new Worker("dist/sha1.js"));
 
     const busyWorkers = new Set();
-    const waitingTasks: { data: Sha1Data, callback: (param: any) => any}[] = [];
+    const waitingTasks: { data: Sha1Data, callback: (param: any) => any }[] = [];
 
     function EnqueueWorkerTask(data: Sha1Data, callback: (param: any) => any)
     {
@@ -1016,7 +1029,7 @@ const maxWorkerCount = Math.min(navigator.hardwareConcurrency || 1, 8); // use 8
                 if (task)
                     EnqueueWorkerTask(task.data, task.callback);
             }
-            
+
             callback(ev.data);
         };
     }

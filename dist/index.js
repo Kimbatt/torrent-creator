@@ -103,6 +103,12 @@ function ResizeTextarea(element) {
     element.style.height = "auto";
     element.style.height = (element.scrollHeight - 10) + "px";
 }
+function FormatTextareLines(element, resizeTextArea) {
+    if (resizeTextArea === void 0) { resizeTextArea = true; }
+    element.value = element.value.split(/\s+/g).filter(function (str) { return str.length !== 0; }).join("\n");
+    if (resizeTextArea)
+        ResizeTextarea(element);
+}
 function GetSizeStr(size) {
     if (size < 1024)
         return size + " bytes";
@@ -217,6 +223,9 @@ function SetTorrentData() {
             announceList.push([okTrackersList[i]]);
         torrentObject["announce-list"] = announceList;
     }
+    var webSeeds = document.getElementById("torrent_webseeds").value.split(/\s+/).filter(function (str) { return str.length !== 0; });
+    if (webSeeds.length !== 0)
+        torrentObject["url-list"] = webSeeds;
     var comment = document.getElementById("torrent_comment").value;
     if (comment !== "")
         torrentObject["comment"] = comment;

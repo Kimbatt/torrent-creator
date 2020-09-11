@@ -48,7 +48,7 @@ textarea
     background: #484848;
     border: 1px solid #8a8a8a;
     font-size: 22px;
-    margin: 20px;
+    margin: 15px;
     padding: 10px;
     resize: none;
     white-space: nowrap;
@@ -163,10 +163,15 @@ label
 </head>
 
 <body>
-<div id="no_worker_warning" style="display: none; margin: 20px; color: #ff3d58; font-size: 20px;">Your browser does not support <a href="https://caniuse.com/#feat=webworkers">web workers</a>. Please use a newer browser.</div>
+<div id="no_worker_warning" style="display: none; margin: 20px; color: #ff3d58; font-size: 20px;">
+    Your browser does not support <a href="https://caniuse.com/#feat=webworkers">web workers</a>. Please use a newer browser.
+</div>
 <div id="page">
 <a href="https://github.com/Kimbatt/torrent-creator" style="position: absolute; width: 32px; height: 32px; top:20px; right:20px;">
-<svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="white" d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"></path></svg></a>
+    <svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path fill="white" d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"></path>
+    </svg>
+</a>
 <a id="download_link" style="display: none"></a>
 
 <div style="font-size: 32px; margin: 5px 0px 15px 20px;">Create torrent files online</div>
@@ -177,8 +182,16 @@ label
 <input type="file" style="display: none" id="filechooser" onclick="this.value=null" onchange="FileSelected(this.files)">
 <input type="file" style="display: none" id="folderchooser" webkitdirectory onclick="this.value=null" onchange="FolderSelected(this.files)">
 
-<div id="no_folder_warning" style="display: none; margin: 20px; color: #ff3d58; font-size: 20px;">Your browser does not support folder selection, so you can only create torrent files from single files. You can check which browsers support folder selection <a href="https://caniuse.com/#feat=input-file-directory">here.</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="javascript:void(0)" onclick="document.getElementById('no_folder_warning').style.display='none'">(hide warning)</a></div>
-<div id="no_wasm_warning" style="display: none; margin-left: 20px; color: #ff3d58; font-size: 20px;">Warning: your browser does not support webassembly. It can take a loooong time to read large files. You can check which browsers support webassembly <a href="https://caniuse.com/#feat=wasm">here.</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="javascript:void(0)" onclick="document.getElementById('no_wasm_warning').style.display='none'">(hide warning)</a></div>
+<div id="no_folder_warning" style="display: none; margin: 20px; color: #ff3d58; font-size: 20px;">
+    Your browser does not support folder selection, so you can only create torrent files from single files. You can check which browsers support folder selection
+    <a href="https://caniuse.com/#feat=input-file-directory">here.</a>&nbsp;&nbsp;&nbsp;&nbsp;
+    <a href="javascript:void(0)" onclick="document.getElementById('no_folder_warning').style.display='none'">(hide warning)</a>
+</div>
+<div id="no_wasm_warning" style="display: none; margin-left: 20px; color: #ff3d58; font-size: 20px;">
+    Warning: your browser does not support webassembly. It can take a loooong time to read large files. You can check which browsers support webassembly
+    <a href="https://caniuse.com/#feat=wasm">here.</a>&nbsp;&nbsp;&nbsp;&nbsp;
+    <a href="javascript:void(0)" onclick="document.getElementById('no_wasm_warning').style.display='none'">(hide warning)</a>
+</div>
 
 <input type="text" id="torrent_name" class="input-fullwidth" style="margin: 20px;" placeholder="Torrent name" oninput="TorrentParamsChanged('name')">
 <br />
@@ -201,10 +214,16 @@ label
     </select>
     </label>
 
-    <label style="font-size: 22px; margin-left: 30px; margin-bottom: 20px;" oninput="TorrentParamsChanged('private')">Private torrent<input id="torrent_is_private" type="checkbox" style="transform:scale(2); background: white; margin-left: 20px;"></label>
+    <label style="font-size: 22px; margin-left: 30px; margin-bottom: 20px;" oninput="TorrentParamsChanged('private')">
+        Private torrent
+        <input id="torrent_is_private" type="checkbox" style="transform:scale(2); background: white; margin-left: 20px;">
+    </label>
 </div>
 
-<label style="font-size: 22px; margin-left: 30px;">Set creation date<input id="torrent_creation_date" type="checkbox" style="transform:scale(2); background: white; margin-left: 20px;" checked oninput="TorrentParamsChanged('creationdate')"></label>
+<label style="font-size: 22px; margin-left: 30px;">
+    Set creation date
+    <input id="torrent_creation_date" type="checkbox" style="transform:scale(2); background: white; margin-left: 20px;" checked
+        oninput="TorrentParamsChanged('creationdate')"></label>
 <br />
 
 <div id="trackers_list_overlay">
@@ -212,34 +231,51 @@ label
         <button style="position: absolute; margin: 10px 0px 0px 10px;" onclick="ShowTrackers(false)">Close</button>
         <div style="left: 50%; font-size: 24px; text-align: center; margin-top: 10px; margin-bottom: 50px;">Click on a tracker to add it to the list!</div>
         <div id="tracker_button_container"></div>
-        <div style="margin: 30px 0px 5px 5px; font-size: 20px;">Tracker list from <a href="https://github.com/ngosang/trackerslist/">https://github.com/ngosang/trackerslist/</a></div>
+        <div style="margin: 30px 0px 5px 5px; font-size: 20px;">Tracker list from
+            <a href="https://github.com/ngosang/trackerslist/">https://github.com/ngosang/trackerslist/</a>
+        </div>
     </div>
 </div>
 
 <div style="position: relative;">
-<textarea id="torrent_trackers" class="input-fullwidth" style="height: 150px; margin-top: 20px; white-space: pre-wrap;" placeholder="Trackers, separated by space or newline (optional)" oninput="TorrentParamsChanged('trackers')"></textarea>
-<button id="tracker_add_button" style="position: absolute; right: 35px; top: 30px; visibility: hidden; opacity: 0; transition: opacity 0.5s ease-in-out;" onclick="ShowTrackers(true)">Add some trackers</button>
+    <textarea id="torrent_trackers" class="input-fullwidth" style="height: 130px; margin-top: 20px; white-space: pre-wrap;"
+        placeholder="Trackers, separated by space or newline (optional)" oninput="TorrentParamsChanged('trackers')" onchange="FormatTextareLines(this, false)"></textarea>
+    <button id="tracker_add_button" style="position: absolute; right: 35px; top: 30px; visibility: hidden; opacity: 0; transition: opacity 0.5s ease-in-out;"
+        onclick="ShowTrackers(true)">
+        Add some trackers
+    </button>
 </div>
 <br />
-<textarea type="text" id="torrent_comment" class="input-fullwidth" style="margin-bottom: 20px; overflow: hidden;" placeholder="Comment (optional)" oninput="ResizeTextarea(this);TorrentParamsChanged('comment')"></textarea>
+<textarea type="text" id="torrent_webseeds" class="input-fullwidth" style="margin-top: 0px; overflow: hidden;"
+    placeholder="Web seeds, separated by space or newline (optional)" oninput="ResizeTextarea(this);TorrentParamsChanged('url-list')"
+    onchange="FormatTextareLines(this)"></textarea>
 <br />
-<input type="text" id="torrent_source" class="input-fullwidth" style="margin-bottom: 20px;" placeholder="Source (optional)" oninput="TorrentParamsChanged('source')">
+<textarea type="text" id="torrent_comment" class="input-fullwidth" style="margin-top: 0px; overflow: hidden;"
+    placeholder="Comment (optional)" oninput="ResizeTextarea(this);TorrentParamsChanged('comment')"></textarea>
+<br />
+<input type="text" id="torrent_source" class="input-fullwidth" style="margin-bottom: 20px;" placeholder="Source (optional)"
+    oninput="TorrentParamsChanged('source')">
 <br />
 
 <div id="error_text" style="display: none; font-size: 25px; color: #ff3d58; margin-left: 20px; margin-bottom: 20px;"></div>
 
 <div id="progressbar_container" class="progress-bar-hidden" style="margin-left: 20px; border: 2px solid #bcbcbc; border-radius: 5px; width: calc(100% - 50px); position: relative;">
     <div id="progressbar" style="background: #23b235; width: 0%; height: 100%; border-radius: 3px;"></div>
-    <div id="progressbar_text" style="display:block; position: absolute; bottom: 4px; font-size: 25px; padding-bottom: 2px; padding-left: 6px; text-shadow: 2px 2px 5px blue;"></div>
+    <div id="progressbar_text"style="display:block; position: absolute; bottom: 4px; font-size: 25px; padding-bottom: 2px; padding-left: 6px; text-shadow: 2px 2px 5px blue;"></div>
 </div>
 
-<div id="progressbar_processing_container" class="progress-bar-hidden" style="margin-left: 20px; margin-top: 6px; border: 2px solid #bcbcbc; border-radius: 5px; width: calc(100% - 50px); position: relative;">
+<div id="progressbar_processing_container" class="progress-bar-hidden"
+    style="margin-left: 20px; margin-top: 6px; border: 2px solid #bcbcbc; border-radius: 5px; width: calc(100% - 50px); position: relative;">
     <div id="progressbar_processing" style="background: #23b235; width: 0%; height: 100%; border-radius: 3px;"></div>
     <div id="progressbar_processing_text" style="display:block; position: absolute; bottom: 4px; font-size: 25px; padding-bottom: 2px; padding-left: 6px; text-shadow: 2px 2px 5px blue;"></div>
 </div>
 
-<button id="create_torrent_button" style="display: grid; margin: 20px 0px 0px 20px; width: calc(100% - 46px); max-width: 600px; height: 100px; font-size: 50px; line-height: 80px;" onclick="CreateTorrent()" disabled>Create torrent</button>
+<button id="create_torrent_button" style="display: grid; margin: 20px 0px 0px 20px; width: calc(100% - 46px); max-width: 600px; height: 100px; font-size: 50px; line-height: 80px;"
+    onclick="CreateTorrent()" disabled>
+    Create torrent
+</button>
 </div>
+
 <script src="dist/index.js"></script>
 <script>
 if (typeof Promise === "undefined")
