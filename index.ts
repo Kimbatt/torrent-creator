@@ -191,7 +191,7 @@ interface TorrentInfo
     pieces: number[] | string;
     "piece length": number;
     files?: TorrentFileInfo[];
-    length: number;
+    length?: number;
     source?: string;
 }
 
@@ -253,7 +253,7 @@ function SetTorrentData()
         }
     }
 
-    const infoObject: TorrentInfo = (torrentObject && torrentObject["info"]) || { name: "", pieces: "", "piece length": 0, length: 0 };
+    const infoObject: TorrentInfo = (torrentObject && torrentObject["info"]) || { name: "", pieces: "", "piece length": 0 };
     torrentObject = { "info": infoObject };
 
     const okTrackersList = Object.keys(okTrackers);
