@@ -78,10 +78,10 @@ function sha1_unrolled(inputBytes: Uint8Array)
     function convert_hex(val: number)
     {
         const bytes: number[] = [];
-        
+
         for (let i = 3; i >= 0; --i)
             bytes.push((val >>> i * 8) & 0xff);
-        
+
         return bytes;
     };
 
@@ -152,7 +152,7 @@ function sha1_unrolled(inputBytes: Uint8Array)
         W[13] = wordArray[blockstart + 13];
         W[14] = wordArray[blockstart + 14];
         W[15] = wordArray[blockstart + 15];
-        
+
         let n: number, temp: number;
         n = W[13] ^ W[8] ^ W[2] ^ W[0];
         W[16] = ((n << 1) | (n >>> 31));
@@ -786,9 +786,8 @@ function PostMessage(message: any, transfer?: Transferable[] | undefined)
     postMessage(message, <any>transfer);
 }
 
-onmessage = ev =>
+function ProcessSha1Data(data: Sha1Data)
 {
-    const data = <Sha1Data>ev.data;
     const array = data.data;
     const blockSize = data.blockSize;
     const maxSize = data.readChunkSize;
@@ -803,5 +802,11 @@ onmessage = ev =>
         result.set(current, 20 * i);
     }
 
+    return result;
+}
+
+onmessage = ev =>
+{
+    const result = ProcessSha1Data(<Sha1Data>ev.data);
     PostMessage(result, [result.buffer]);
 };

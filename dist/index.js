@@ -7,6 +7,8 @@ var __extends = (this && this.__extends) || (function () {
         return extendStatics(d, b);
     };
     return function (d, b) {
+        if (typeof b !== "function" && b !== null)
+            throw new TypeError("Class extends value " + String(b) + " is not a constructor or null");
         extendStatics(d, b);
         function __() { this.constructor = d; }
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
@@ -48,12 +50,6 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
-if (typeof Worker === "undefined") {
-    document.getElementById("no_worker_warning").style.display = "";
-    document.getElementById("page").style.display = "none";
-    // just exit here
-    throw new Error();
-}
 var folderSelectionEnabled = false;
 if (typeof WebAssembly === "undefined")
     document.getElementById("no_wasm_warning").style.display = "";
@@ -761,10 +757,66 @@ var Bencode = {
 var sha1;
 // workers
 var maxWorkerCount = Math.min(navigator.hardwareConcurrency || 1, 8); // use 8 workers at max, reading from disk will be the slowest anyways
+function SetupSha1WithoutWorkers() {
+    var sha1ScriptLoaded = false;
+    var waitingResolvers = [];
+    function EnsureSha1ScriptLoaded() {
+        return __awaiter(this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        if (!!sha1ScriptLoaded) return [3 /*break*/, 2];
+                        return [4 /*yield*/, new Promise(function (resolve) { return waitingResolvers.push(resolve); })];
+                    case 1:
+                        _a.sent();
+                        _a.label = 2;
+                    case 2: return [2 /*return*/];
+                }
+            });
+        });
+    }
+    var script = document.createElement("script");
+    script.src = "dist/sha1.js";
+    script.onload = function () {
+        sha1ScriptLoaded = true;
+        waitingResolvers.forEach(function (resolve) { return resolve(); });
+        waitingResolvers.length = 0;
+    };
+    document.body.appendChild(script);
+    sha1 = function (data) {
+        return __awaiter(this, void 0, void 0, function () {
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, EnsureSha1ScriptLoaded()];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/, ProcessSha1Data(data)];
+                }
+            });
+        });
+    };
+}
 (function () {
     var workers = [];
-    for (var i = 0; i < maxWorkerCount; ++i)
-        workers.push(new Worker("dist/sha1.js"));
+    var workersAvailable = true;
+    if (location.protocol === "https:" || location.protocol === "http:") {
+        try {
+            for (var i = 0; i < maxWorkerCount; ++i)
+                workers.push(new Worker("dist/sha1.js"));
+        }
+        catch (e) {
+            workersAvailable = false;
+        }
+    }
+    else {
+        // workers are only available when using http/https
+        workersAvailable = false;
+    }
+    if (!workersAvailable) {
+        // fall back to single threaded version
+        SetupSha1WithoutWorkers();
+        return;
+    }
     var busyWorkers = new Set();
     var waitingTasks = [];
     function EnqueueWorkerTask(data, callback) {

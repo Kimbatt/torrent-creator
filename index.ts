@@ -1,13 +1,4 @@
 
-if (typeof Worker === "undefined")
-{
-    document.getElementById("no_worker_warning")!.style.display = "";
-    document.getElementById("page")!.style.display = "none";
-
-    // just exit here
-    throw new Error();
-}
-
 let folderSelectionEnabled = false;
 
 if (typeof WebAssembly === "undefined")
@@ -987,11 +978,65 @@ interface Sha1Data
 
 // workers
 const maxWorkerCount = Math.min(navigator.hardwareConcurrency || 1, 8); // use 8 workers at max, reading from disk will be the slowest anyways
+
+function SetupSha1WithoutWorkers()
+{
+    let sha1ScriptLoaded = false;
+    const waitingResolvers: (() => void)[] = [];
+    async function EnsureSha1ScriptLoaded()
+    {
+        if (!sha1ScriptLoaded)
+            await new Promise<void>(resolve => waitingResolvers.push(resolve));
+    }
+
+    const script = document.createElement("script");
+    script.src = "dist/sha1.js";
+
+    script.onload = function()
+    {
+        sha1ScriptLoaded = true;
+        waitingResolvers.forEach(resolve => resolve());
+        waitingResolvers.length = 0;
+    };
+
+    document.body.appendChild(script);
+
+    sha1 = async function(data: Sha1Data)
+    {
+        await EnsureSha1ScriptLoaded();
+        return ProcessSha1Data(data);
+    };
+}
+
 (() =>
 {
     const workers: Worker[] = [];
-    for (let i = 0; i < maxWorkerCount; ++i)
-        workers.push(new Worker("dist/sha1.js"));
+
+    let workersAvailable = true;
+    if (location.protocol === "https:" ||  location.protocol === "http:")
+    {
+        try
+        {
+            for (let i = 0; i < maxWorkerCount; ++i)
+                workers.push(new Worker("dist/sha1.js"));
+        }
+        catch (e)
+        {
+            workersAvailable = false;
+        }
+    }
+    else
+    {
+        // workers are only available when using http/https
+        workersAvailable = false;
+    }
+
+    if (!workersAvailable)
+    {
+        // fall back to single threaded version
+        SetupSha1WithoutWorkers();
+        return;
+    }
 
     const busyWorkers = new Set();
     const waitingTasks: { data: Sha1Data, callback: (param: any) => any }[] = [];

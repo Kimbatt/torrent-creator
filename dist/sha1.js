@@ -742,8 +742,7 @@ function PostMessage(message, transfer) {
     // hack for typescript without web worker lib
     postMessage(message, transfer);
 }
-onmessage = function (ev) {
-    var data = ev.data;
+function ProcessSha1Data(data) {
     var array = data.data;
     var blockSize = data.blockSize;
     var maxSize = data.readChunkSize;
@@ -755,5 +754,9 @@ onmessage = function (ev) {
         remainingBytes -= blockSize;
         result.set(current, 20 * i);
     }
+    return result;
+}
+onmessage = function (ev) {
+    var result = ProcessSha1Data(ev.data);
     PostMessage(result, [result.buffer]);
 };
