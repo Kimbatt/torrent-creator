@@ -368,7 +368,8 @@ function Finished()
 
     const button = <HTMLButtonElement>document.getElementById("create_torrent_button");
     button.textContent = "Download torrent file";
-    if (window.navigator.msSaveOrOpenBlob)
+    const msSaveOrOpenBlob: ((blob: any, defaultName?: string, retVal?: boolean) => boolean) | undefined = (window.navigator as any).msSaveOrOpenBlob;
+    if (msSaveOrOpenBlob)
     {
         button.onclick = function()
         {
@@ -381,7 +382,7 @@ function Finished()
             }
 
             if (torrentObject && torrentObject.info)
-                window.navigator.msSaveOrOpenBlob(blob, torrentObject.info.name + ".torrent");
+                msSaveOrOpenBlob(blob, torrentObject.info.name + ".torrent");
         };
     }
     else
@@ -417,10 +418,15 @@ function Finished()
     DisableElements(false);
 }
 
-function Failed(fileName: string | null)
+function Failed(fileName: string | null, err: DOMException | null)
 {
     const errorTextDiv = document.getElementById("error_text")!;
-    errorTextDiv.textContent = fileName ? ("Failed to read file: " + fileName) : "Error reading file";
+    let errorText = fileName ? ("Failed to read file: " + fileName) : "Error reading file";
+
+    if (err)
+        errorText += "\nReason: " + err.message + " (" + err.name + ")";
+
+    errorTextDiv.textContent = errorText;
     errorTextDiv.style.display = "block";
 
     const progressBar = document.getElementById("progressbar")!;
@@ -564,7 +570,7 @@ function CreateFromFile(obj: TorrentObject)
 
     fr.onerror = function()
     {
-        Failed(singleFile && singleFile.name);
+        Failed(singleFile && singleFile.name, fr.error);
     };
 
     reader();
@@ -743,7 +749,7 @@ function CreateFromFolder(obj: TorrentObject)
 
     fr.onerror = function()
     {
-        Failed(currentFile.name);
+        Failed(currentFile.name, fr.error);
     };
 
     progressBarText.innerHTML = "Reading file: " + currentFile.name;

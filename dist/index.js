@@ -296,7 +296,8 @@ function Finished() {
     UpdateBlob();
     var button = document.getElementById("create_torrent_button");
     button.textContent = "Download torrent file";
-    if (window.navigator.msSaveOrOpenBlob) {
+    var msSaveOrOpenBlob = window.navigator.msSaveOrOpenBlob;
+    if (msSaveOrOpenBlob) {
         button.onclick = function () {
             if (torrentChanged) {
                 if (!SetTorrentData())
@@ -304,7 +305,7 @@ function Finished() {
                 UpdateBlob();
             }
             if (torrentObject && torrentObject.info)
-                window.navigator.msSaveOrOpenBlob(blob, torrentObject.info.name + ".torrent");
+                msSaveOrOpenBlob(blob, torrentObject.info.name + ".torrent");
         };
     }
     else {
@@ -333,9 +334,12 @@ function Finished() {
     creationInProgress = false;
     DisableElements(false);
 }
-function Failed(fileName) {
+function Failed(fileName, err) {
     var errorTextDiv = document.getElementById("error_text");
-    errorTextDiv.textContent = fileName ? ("Failed to read file: " + fileName) : "Error reading file";
+    var errorText = fileName ? ("Failed to read file: " + fileName) : "Error reading file";
+    if (err)
+        errorText += "\nReason: " + err.message + " (" + err.name + ")";
+    errorTextDiv.textContent = errorText;
     errorTextDiv.style.display = "block";
     var progressBar = document.getElementById("progressbar");
     progressBar.style.display = "none";
@@ -450,7 +454,7 @@ function CreateFromFile(obj) {
         });
     };
     fr.onerror = function () {
-        Failed(singleFile && singleFile.name);
+        Failed(singleFile && singleFile.name, fr.error);
     };
     reader();
 }
@@ -587,7 +591,7 @@ function CreateFromFolder(obj) {
         });
     };
     fr.onerror = function () {
-        Failed(currentFile.name);
+        Failed(currentFile.name, fr.error);
     };
     progressBarText.innerHTML = "Reading file: " + currentFile.name;
     progressBarProcessingText.textContent = "Processing: 0%";
