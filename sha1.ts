@@ -807,6 +807,9 @@ function ProcessSha1Data(data: Sha1Data)
 
 onmessage = ev =>
 {
-    const result = ProcessSha1Data(<Sha1Data>ev.data);
-    PostMessage(result, [result.buffer]);
+    const sha1Data = <Sha1Data>ev.data;
+    const result = ProcessSha1Data(sha1Data);
+    // workaround: must transfer back the original buffer, otherwise it won't be garbage collected in chrome
+    // also because of the same reason, the result is not sent back as transferable (usually it's pretty small anyways)
+    PostMessage(result, [sha1Data.data.buffer]);
 };
