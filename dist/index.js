@@ -201,7 +201,7 @@ function SetTorrentData() {
         var current = trackers[i].trim();
         if (current === "")
             continue;
-        if (current.match(/.+:\/\/([a-z0-9-]+\.)*([a-z0-9-]+):\d+((\/.*)\/announce)?/))
+        if (current.match(/.+:\/\/((\[[a-fA-F0-9:]+\])|([a-z0-9-]+\.)*([a-z0-9-]+)):\d+((\/.*)\/announce)?/))
             okTrackers[current] = true;
         else {
             errorTextDiv.innerHTML = "Invalid tracker: " + current;
