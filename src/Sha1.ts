@@ -14,7 +14,9 @@ type WorkerObject = RemoteProxy<Sha1WorkerObject>;
 function createWorkerPool(workers: WorkerObject[]) {
     const waitingResolvers: ((worker: WorkerObject) => void)[] = [];
 
-    return async (data: Uint8Array[]) => {
+    let activeCreationId = -1;
+
+    const computeHashes = async (data: Uint8Array[], creationId: number | null) => {
         let worker: WorkerObject;
 
         if (workers.length !== 0) {
@@ -23,8 +25,13 @@ function createWorkerPool(workers: WorkerObject[]) {
             worker = await new Promise<WorkerObject>(res => waitingResolvers.push(res));
         }
 
-        data.forEach(TransferTypedArray);
-        const result = await worker.computeHashes(data);
+        const isCancelled = creationId !== null && creationId !== activeCreationId;
+
+        if (!isCancelled) {
+            data.forEach(TransferTypedArray);
+        }
+
+        const result = isCancelled ? null : await worker.computeHashes(data);
 
         const waitingResolver = waitingResolvers.pop();
         if (waitingResolver === undefined) {
@@ -34,6 +41,15 @@ function createWorkerPool(workers: WorkerObject[]) {
         }
 
         return result;
+    };
+
+    const setCreationId = async (id: number) => {
+        activeCreationId = id;
+    };
+
+    return {
+        computeHashes,
+        setCreationId,
     };
 }
 

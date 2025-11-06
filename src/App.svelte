@@ -14,6 +14,8 @@
         type TorrentInfo,
     } from "./TorrentObject";
     import { BlockSize, type TorrentUIParameters } from "./UIState";
+    import { workerPoolPromise } from "./Sha1";
+    import CustomCheckbox from "./CustomCheckbox.svelte";
 
     const enum TorrentCreationState {
         NotStarted,
@@ -55,7 +57,7 @@
     });
 
     $effect(() => {
-        if (!trackersOverlayVisible) {
+        if (trackersOverlayVisible) {
             for (const tracker of builtinTrackers) {
                 tracker.visible = true;
             }
@@ -79,9 +81,8 @@
     });
     let infoHash: string | null = $state(null);
 
-    let readingProgressText = $state("");
-    let readingProgress = $state(0);
-    let processingProgress = $state(0);
+    let progressText = $state("");
+    let progressPercentage = $state(0);
 
     let errorText: string | null = $state(null);
 
@@ -121,6 +122,8 @@
 
     function resetCreationState() {
         creationState = TorrentCreationState.NotStarted;
+        progressPercentage = 0;
+        progressText = "";
         pieces = null;
         lastValidInfoObject = null;
 
@@ -130,9 +133,23 @@
         downloadBlobUrl = null;
     }
 
+    resetCreationState();
+
     $effect(() => {
         Track(selectedFileOrFolderInfo, torrentUIParameters.blockSize);
         resetCreationState();
+    });
+
+    $effect(() => {
+        // Hide error text if any of these parameters change
+        Track(
+            selectedFileOrFolderInfo,
+            torrentUIParameters.blockSize,
+            torrentUIParameters.name,
+            torrentUIParameters.trackers,
+            torrentUIParameters.webSeeds,
+        );
+        errorText = null;
     });
 
     let createTorrentButtonText = $derived.by((): string => {
@@ -158,9 +175,15 @@
     let creationId = 0;
 
     async function createTorrent() {
+        trackersOverlayVisible = false;
+
+        const workerPool = await workerPoolPromise;
+
         if (creationState === TorrentCreationState.InProgress) {
+            // Cancel
             ++creationId;
             resetCreationState();
+            workerPool.setCreationId(creationId);
             return;
         }
 
@@ -178,33 +201,46 @@
         const blockSize = getBlockSize(torrentUIParameters.blockSize, totalSize);
 
         const currentCreationId = ++creationId;
+        workerPool.setCreationId(currentCreationId);
 
         if (creationState === TorrentCreationState.NotStarted || pieces === null) {
             creationState = TorrentCreationState.InProgress;
-            readingProgress = 0;
-            processingProgress = 0;
+
+            const isCancelled = () => currentCreationId !== creationId;
 
             let totalBytesRead = 0;
             let totalBytesProcessed = 0;
 
-            const isCancelled = () => currentCreationId !== creationId;
+            const invTotalSize = 1 / totalSize;
+            const updateProgress = () => {
+                if (isCancelled()) {
+                    return;
+                }
+
+                const readingProgress = totalBytesRead * invTotalSize;
+                const processingProgress = totalBytesProcessed * invTotalSize;
+                progressPercentage = (readingProgress + processingProgress) * 0.5;
+            };
+
+            updateProgress();
 
             const calculateHashesResult = (
                 await calculateHashes(
                     selectedFileOrFolderInfo.fileList,
                     totalSize,
                     blockSize,
-                    isCancelled,
+                    currentCreationId,
+                    () => creationId,
                     numBytes => {
                         totalBytesRead += numBytes;
-                        readingProgress = totalBytesRead / totalSize;
+                        updateProgress();
                     },
                     numBytes => {
                         totalBytesProcessed += numBytes;
-                        processingProgress = totalBytesProcessed / totalSize;
+                        updateProgress();
                     },
                     filePath => {
-                        readingProgressText = "Reading file: " + filePath;
+                        progressText = filePath;
                     },
                 )
             ).getData();
@@ -217,10 +253,8 @@
 
             pieces = calculateHashesResult.result;
 
-            readingProgress = 1;
-            processingProgress = 1;
-
-            readingProgressText = "Done";
+            progressPercentage = 1;
+            progressText = "Done";
         }
 
         // Create torrent object
@@ -277,26 +311,42 @@
 
     <div class="title">Create torrent files online</div>
 
-    <div class="picker-buttons">
-        <button
-            disabled={disableInputs}
-            onclick={() => fileSelectorInput.click()}
-        >
-            Select file
-        </button>
-        <button
-            disabled={disableInputs}
-            onclick={() => folderSelectorInput.click()}
-        >
-            Select folder
-        </button>
+    <div
+        class="pickers"
+        class:nothing-selected={selectedFileOrFolderInfo === null}
+    >
+        <div class="buttons">
+            <button
+                disabled={disableInputs}
+                onclick={() => fileSelectorInput.click()}
+            >
+                Select file
+            </button>
+            <button
+                disabled={disableInputs}
+                onclick={() => folderSelectorInput.click()}
+            >
+                Select folder
+            </button>
+        </div>
 
-        {#if selectedFileOrFolderInfo !== null}
-            <div style="font-size: 22px;">
-                Selected {selectedFileOrFolderInfo.input.type === InputType.Folder ? "folder" : "file"}: {selectedFileOrFolderInfo.name}
-                ({GetSizeStr(selectedFileOrFolderInfo.size)})
-            </div>
-        {/if}
+        <div class="info">
+            {#if selectedFileOrFolderInfo !== null}
+                <div class="wrap">
+                    <div>
+                        Selected {selectedFileOrFolderInfo.input.type === InputType.Folder ? "folder" : "file"}:
+                    </div>
+                    <div class="selected-name">
+                        {selectedFileOrFolderInfo.name}
+                    </div>
+                </div>
+                <div>
+                    Size: {GetSizeStr(selectedFileOrFolderInfo.size)}
+                </div>
+            {:else}
+                <div>Select a file or a folder to begin</div>
+            {/if}
+        </div>
     </div>
 
     <input
@@ -325,11 +375,11 @@
         bind:value={torrentUIParameters.name}
     />
 
-    <div style="display: flex; flex-wrap: wrap; gap: 20px 200px;">
-        <label style="font-size: 22px;">
-            Piece size:
+    <div class="options-container">
+        <label>
+            <div class:disabled-text={disableInputs}>Piece size:</div>
             <select
-                style="width: 250px;"
+                style="width: 220px;"
                 disabled={disableInputs}
                 bind:value={torrentUIParameters.blockSize}
             >
@@ -350,60 +400,17 @@
             </select>
         </label>
 
-        <label style="font-size: 22px;">
-            Private torrent
-            <input
-                type="checkbox"
-                disabled={disableInputs}
-                style="transform: scale(2); background: white;"
-                bind:checked={torrentUIParameters.isPrivate}
-            />
-        </label>
-    </div>
-
-    <label style="font-size: 22px; align-self: start;">
-        Set creation date
-        <input
-            type="checkbox"
+        <CustomCheckbox
+            bind:checked={torrentUIParameters.isPrivate}
+            text="Private torrent"
             disabled={disableInputs}
-            style="transform: scale(2); background: white;"
-            bind:checked={torrentUIParameters.setCreationDate}
         />
-    </label>
 
-    <div
-        class="overlay"
-        class:visible={trackersOverlayVisible}
-    >
-        <div class="trackers-list">
-            <button
-                style="position: absolute;"
-                onclick={() => (trackersOverlayVisible = false)}
-            >
-                Close
-            </button>
-            <div style="align-self: center; font-size: 24px; margin-bottom: 20px;">
-                Click on a tracker to add it to the list!
-            </div>
-            <div class="trackers-list-container">
-                {#each builtinTrackers as tracker}
-                    <button
-                        class="trackers-list-element"
-                        class:hidden={!tracker.visible}
-                        onclick={() => {
-                            torrentUIParameters.trackers += tracker.url + "\n";
-                            tracker.visible = false;
-                        }}
-                    >
-                        {tracker.url}
-                    </button>
-                {/each}
-            </div>
-            <div style="font-size: 20px;">
-                Tracker list from
-                <a href="https://github.com/ngosang/trackerslist/">https://github.com/ngosang/trackerslist/</a>
-            </div>
-        </div>
+        <CustomCheckbox
+            bind:checked={torrentUIParameters.setCreationDate}
+            text="Set creation date"
+            disabled={disableInputs}
+        />
     </div>
 
     <div style="position: relative; display: flex;">
@@ -425,6 +432,38 @@
         >
             Add some trackers
         </button>
+
+        <div
+            class="trackers-overlay"
+            class:visible={trackersOverlayVisible}
+            onmouseleave={() => (trackersOverlayVisible = false)}
+        >
+            <div class="trackers-list">
+                <div style="align-self: center;">Click on a tracker to add it to the list!</div>
+
+                <div class="trackers-list-container">
+                    {#each builtinTrackers as tracker}
+                        <button
+                            class="trackers-list-element"
+                            class:visible={tracker.visible}
+                            onclick={() => {
+                                torrentUIParameters.trackers += tracker.url + "\n";
+                                tracker.visible = false;
+                            }}
+                        >
+                            {tracker.url}
+                        </button>
+                    {/each}
+                </div>
+
+                <div>
+                    Tracker list from
+                    <a href="https://github.com/ngosang/trackerslist/">https://github.com/ngosang/trackerslist/</a>
+                </div>
+
+                <button onclick={() => (trackersOverlayVisible = false)}>Close</button>
+            </div>
+        </div>
     </div>
 
     <textarea
@@ -456,89 +495,84 @@
         bind:value={torrentUIParameters.source}
     />
 
-    {#if errorText !== null}
-        <div style="font-size: 25px; color: #ff3d58; white-space: pre-line;">
-            {errorText}
-        </div>
-    {/if}
-
-    {#snippet renderProgressBar(text: string, progress: number, showPercentageText: boolean)}
+    <div
+        class="progress-bar-container"
+        class:not-started={creationState === TorrentCreationState.NotStarted}
+    >
         <div
-            class="progress-bar-container"
-            class:visible={creationState !== TorrentCreationState.NotStarted}
-        >
-            <div
-                class="progressbar"
-                style="background: #23b235; height: 100%; border-radius: 3px;"
-                style:width={`${progress * 100}%`}
-            ></div>
-            <div
-                style="position: absolute; bottom: 4px; font-size: 25px; padding-bottom: 2px; padding-left: 6px; text-shadow: 2px 2px 5px blue;"
-            >
-                {#if showPercentageText}
-                    {`${text}: ${(progress * 100).toFixed(2)}%`}
-                {:else}
-                    {text}
-                {/if}
+            class="bar"
+            style:transform={`scaleX(${progressPercentage})`}
+        ></div>
+        <div class="text-container">
+            <div class="progress-text">
+                {progressText}
+            </div>
+            <div class="percentage-text">
+                {`${(progressPercentage * 100).toFixed(2)}%`}
             </div>
         </div>
-    {/snippet}
-
-    {@render renderProgressBar(readingProgressText, readingProgress, false)}
-    {@render renderProgressBar(
-        processingProgress === 1 ? "Done" : "Processing",
-        processingProgress,
-        processingProgress !== 1,
-    )}
+    </div>
 
     <div style="display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 32px;">
         <button
-            style="width: 600px; height: 100px; font-size: 50px; line-height: 80px;"
+            class="create-torrent-button"
             onclick={createTorrent}
             disabled={!canCreateTorrent}
         >
             {createTorrentButtonText}
         </button>
 
-        {#if infoHash !== null}
+        {#if errorText !== null}
+            <div class="error-text">
+                {errorText}
+            </div>
+        {:else if infoHash !== null}
             <div class="info-hash-container">
-                Info hash: <code class="info-hash-value">{infoHash}</code>
+                <div>Info hash:</div>
+                <div class="info-hash-value">{infoHash}</div>
             </div>
         {/if}
     </div>
 </div>
 
 <style lang="scss">
-    $dark-background: #484848;
-    $dark-border: 1px solid #8a8a8a;
-    $placeholder-color: #a7a7a7;
+    @use "./Constants.scss" as c;
 
     :global(body) {
-        background: #323639;
-        color: white;
-        font-family: Sans-Serif;
+        background: c.$color-background;
+        color: c.$color-text;
+        font-family: c.$default-font;
+        font-size: c.$font-size-default;
         margin: 0px;
     }
 
+    button,
+    input,
+    select,
+    textarea {
+        font-family: c.$default-font;
+    }
+
     button {
-        background-color: #146dff;
+        background-color: c.$color-primary;
         border: none;
-        border-radius: 5px;
-        color: #ffffff;
-        padding: 10px 15px 10px 15px;
-        font-family: "Verdana";
-        font-size: 24px;
+        border-radius: c.$default-border-radius;
+        color: c.$color-text;
+        padding: 8px 16px;
+        font-size: c.$font-size-default;
         cursor: pointer;
-        transition: background-color 0.15s linear;
+        transition:
+            background-color c.$default-transition-linear,
+            opacity 0.5s;
         outline: none;
 
         &:hover {
-            background-color: #54adff;
+            background-color: c.$color-primary-hover;
             cursor: pointer;
         }
 
         &:disabled {
-            background-color: #77abff;
+            background-color: c.$color-primary-disabled;
             cursor: not-allowed;
         }
     }
@@ -546,69 +580,142 @@
     textarea,
     input,
     select {
-        color: white;
-        background: $dark-background;
-        border: $dark-border;
+        color: c.$color-text;
+        background-color: c.$color-input-background;
+        border: c.$dark-border;
+        border-radius: c.$default-border-radius;
+        line-height: 30px;
+        opacity: 1;
+
+        transition:
+            color c.$default-transition-linear,
+            background-color c.$default-transition-linear,
+            filter c.$default-transition-linear;
+
+        &:disabled {
+            color: c.$color-text-disabled;
+            filter: brightness(0.8);
+            background-color: c.$color-background-disabled;
+            cursor: not-allowed;
+        }
     }
 
     textarea {
-        font-size: 22px;
+        font-size: c.$font-size-default;
         padding: 10px;
         resize: none;
         white-space: nowrap;
-        font-family: Sans-Serif;
-        line-height: 30px;
 
         &::placeholder {
-            color: $placeholder-color;
+            color: c.$color-placeholder;
+            font-style: italic;
         }
     }
 
     input[type="text"]::placeholder {
-        color: $placeholder-color;
+        color: c.$color-placeholder;
+        font-style: italic;
     }
 
     a {
-        color: #32b2ff;
+        color: #609dff;
     }
 
     select {
-        font-size: 22px;
-        padding: 2px;
-        border-radius: 4px;
+        font-size: c.$font-size-default;
+        padding: 4px 2px;
+        border-radius: c.$default-border-radius;
     }
 
     .page {
         position: relative;
-        margin: 20px;
+        padding: 20px;
+        margin: auto;
 
         display: flex;
         flex-direction: column;
         gap: 20px;
+
+        max-width: 1200px;
     }
 
     .title {
-        font-size: 32px;
+        font-size: c.$font-size-title;
     }
 
     .github-link {
         position: absolute;
         width: 32px;
         height: 32px;
-        top: 0px;
-        right: 0px;
+        top: 20px;
+        right: 20px;
     }
 
-    .picker-buttons {
+    .disabled-text {
+        color: c.$color-text-disabled;
+    }
+
+    .pickers {
         display: flex;
         flex-direction: row;
-        justify-content: flex-start;
         align-items: center;
         gap: 20px;
 
-        > button {
-            width: 200px;
+        > .buttons {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            gap: 12px;
+
+            > button {
+                min-width: 150px;
+            }
         }
+
+        > .info {
+            display: flex;
+            flex-direction: column;
+            flex: 1 1 0px;
+            gap: 8px;
+            overflow: hidden;
+
+            > .wrap {
+                display: flex;
+                flex-direction: row;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: 4px 8px;
+
+                > .selected-name {
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    background-color: c.$color-info-backgroud;
+                    padding: 4px 6px;
+                    border-radius: c.$default-border-radius;
+                }
+            }
+        }
+
+        &.nothing-selected {
+            > .buttons {
+                flex-direction: row;
+            }
+
+            > .info > div {
+                font-style: italic;
+                color: c.$color-placeholder;
+            }
+        }
+    }
+
+    .options-container {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: start;
+        gap: 20px 100px;
     }
 
     .add-trackers-button {
@@ -617,7 +724,6 @@
         top: 8px;
         visibility: hidden;
         opacity: 0;
-        transition: opacity 0.5s ease-in-out;
 
         &.visible {
             visibility: visible;
@@ -627,25 +733,55 @@
 
     .progress-bar-container {
         border: 2px solid #bcbcbc;
-        border-radius: 5px;
-        width: 100%;
+        border-radius: c.$default-border-radius;
+        overflow: hidden;
         position: relative;
 
-        visibility: hidden;
-        opacity: 0;
-        height: 0px;
-        transition:
-            visibility 0s 0.3s,
-            opacity 0.3s linear,
-            height 0.2s ease-in-out;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: stretch;
 
-        &.visible {
-            visibility: visible;
-            opacity: 1;
-            height: 40px;
-            transition:
-                opacity 0.3s linear,
-                height 0.3s ease-in-out;
+        height: 40px;
+
+        transition: opacity c.$default-transition-linear;
+
+        &.not-started {
+            opacity: 0.3;
+        }
+
+        > .bar {
+            position: absolute;
+            z-index: -1;
+            background-color: #23b235;
+            width: 100%;
+            height: 100%;
+            transform-origin: 0%;
+        }
+
+        > .text-container {
+            gap: 50px;
+            display: flex;
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: center;
+
+            > .progress-text,
+            > .percentage-text {
+                font-size: c.$font-size-large;
+                white-space: nowrap;
+                text-shadow: 1px 1px 4px black;
+                padding: 8px;
+            }
+
+            > .progress-text {
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            > .percentage-text {
+                font-family: c.$default-font-percentage;
+            }
         }
     }
 
@@ -659,20 +795,31 @@
         gap: 20px;
     }
 
-    .overlay {
+    .trackers-overlay {
+        $offset: 10px;
+
+        position: absolute;
         visibility: hidden;
         opacity: 0;
-        position: fixed;
-        background: rgba(0, 0, 0, 0.9);
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
+        position: absolute;
+        right: -$offset;
+        top: -100px;
+
         z-index: 1;
 
+        padding: $offset;
+        background-color: rgba(0, 0, 0, 0.5);
+        border-radius: $offset;
+
+        box-shadow: 0px 0px 40px black;
+
+        display: flex;
+        justify-content: center;
+        align-items: center;
+
         transition:
-            opacity 0.15s linear,
-            visibility 0.15s linear;
+            opacity c.$default-transition-linear,
+            visibility c.$default-transition-linear;
 
         &.visible {
             visibility: visible;
@@ -681,55 +828,98 @@
     }
 
     .trackers-list {
-        position: relative;
         border: 2px solid #606060;
-        border-radius: 10px;
-        background: black;
-        opacity: 1;
+        border-radius: c.$default-border-radius;
+        background-color: c.$color-background;
         padding: 5px;
 
         display: flex;
         flex-direction: column;
-        gap: 20px;
+
+        gap: 24px;
         padding: 20px;
-        margin: 20px;
+
+        box-sizing: border-box;
+        max-height: 500px;
+        min-width: 450px;
+
+        > button {
+            align-self: flex-end;
+            min-width: 150px;
+        }
     }
 
     .trackers-list-container {
-        display: flex;
-        flex-direction: row;
-        flex-wrap: wrap;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+        grid-auto-rows: min-content;
         gap: 10px;
+        flex-shrink: 1;
+        overflow-y: auto;
     }
 
     .trackers-list-element {
-        font-size: 16px;
-        padding: 8px 6px;
-        white-space: normal;
+        font-size: c.$font-size-small;
+        padding: 8px 4px;
+        white-space: nowrap;
+        overflow-x: hidden;
+        text-overflow: ellipsis;
+
+        visibility: hidden;
+        opacity: 0;
 
         transition:
-            opacity 0.15s ease-out,
-            visibility 0.15s;
+            opacity c.$default-transition-linear,
+            visibility c.$default-transition-linear,
+            background-color c.$default-transition-linear;
 
-        &.hidden {
-            visibility: hidden;
-            opacity: 0;
+        background-color: c.$color-input-background;
+        border: c.$dark-border;
+
+        &:hover {
+            background-color: c.$color-border;
+        }
+
+        &.visible {
+            visibility: unset;
+            opacity: 1;
+
+            transition: background-color c.$default-transition-linear;
         }
     }
 
     .input-fullwidth {
-        font-family: Arial, Helvetica, sans-serif;
-        font-size: 22px;
+        font-size: c.$font-size-default;
         padding: 5px;
     }
 
+    .error-text {
+        font-size: c.$font-size-large;
+        color: #ff5050;
+        white-space: pre-line;
+    }
+
+    .create-torrent-button {
+        width: 400px;
+        height: 70px;
+        font-size: c.$font-size-title;
+    }
+
     .info-hash-container {
-        font-size: 22px;
+        display: flex;
+        flex-direction: row;
+        justify-content: center;
+        align-items: center;
+        flex-grow: 1;
+        gap: 8px;
+
+        font-size: c.$font-size-default;
 
         > .info-hash-value {
-            background-color: #606060;
-            padding: 6px 8px;
-            border-radius: 6px;
+            font-family: c.$default-font-monospace;
+            background-color: c.$color-info-backgroud;
+            padding: 6px;
+            border-radius: c.$default-border-radius;
         }
     }
 </style>

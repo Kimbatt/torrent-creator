@@ -31,7 +31,7 @@ export type TorrentObject = {
 
 export function validateTorrentInput(torrentUIParameters: TorrentUIParameters): Result<null, string> {
     if (torrentUIParameters.name.length === 0) {
-        return Result.error("Torrent name must not be empty");
+        return Result.error("Torrent name cannot be empty");
     }
 
     if (torrentUIParameters.name.length > 255) {
@@ -53,6 +53,14 @@ export function validateTorrentInput(torrentUIParameters: TorrentUIParameters): 
             }
         } catch {
             return Result.error(`Invalid tracker: \`${tracker}\` (not a valid URL)`);
+        }
+    }
+
+    for (const webSeed of getLines(torrentUIParameters.webSeeds)) {
+        try {
+            new URL(webSeed);
+        } catch {
+            return Result.error(`Invalid web seed: \`${webSeed}\` (not a valid URL)`);
         }
     }
 
@@ -134,18 +142,20 @@ export async function calculateHashes(
     inputFiles: FileWithPath[],
     totalSize: number,
     blockSize: number,
-    isCancelled: () => boolean,
+    creationId: number,
+    getCurrentCreationId: () => number,
     updateReadingProgress: (progress: number) => void,
     updateProcessingProgress: (progress: number) => void,
     onReadingFileStarted: (filePath: string) => void,
 ): Promise<Result<Uint8Array, string | null>> {
-    // Calculate hashes
+    const isCancelled = () => creationId !== getCurrentCreationId();
 
     const totalBlockCount = Math.ceil(totalSize / blockSize);
     const piecesLocal = new Uint8Array(totalBlockCount * 20); // 20 bytes per sha-1 hash
     let pieceIndex = 0;
 
     const workerPool = await workerPoolPromise;
+
     const allWorkerPromises: Promise<void>[] = [];
 
     const memoryPool: Uint8Array[] = [];
@@ -170,7 +180,11 @@ export async function calculateHashes(
         }
 
         async function calculateHashes() {
-            const hashResult = await workerPool(inputs);
+            const hashResult = await workerPool.computeHashes(inputs, creationId);
+            if (hashResult === null) {
+                // Cancelled
+                return;
+            }
 
             // Return reused buffers
             memoryPool.push(...hashResult.originalInputs);
@@ -191,6 +205,10 @@ export async function calculateHashes(
     let readBufferIndex = 0;
 
     function onFileChunkRead(resultBytes: Uint8Array) {
+        if (isCancelled()) {
+            return;
+        }
+
         updateReadingProgress(resultBytes.length);
 
         if (readBufferIndex + resultBytes.length >= readBufferSize) {
@@ -328,7 +346,12 @@ export async function calculateInfoHash(infoObject: TorrentInfo) {
     const bencodeBytes = new BencodeDict(infoObject).encode(new BencodeBuffer()).getBytes();
 
     const workerPool = await workerPoolPromise;
-    const hashResult = await workerPool([bencodeBytes]);
+    const hashResult = await workerPool.computeHashes([bencodeBytes], null);
+
+    if (hashResult === null) {
+        // Shouldn't happen, this is not cancelable
+        throw Error("Calculation was cancelled");
+    }
 
     return [...hashResult.result].map(byte => byte.toString(16).padStart(2, "0")).join("");
 }
