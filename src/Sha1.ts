@@ -2,7 +2,7 @@ import type { Sha1WorkerObject } from "./Sha1Worker";
 import Sha1Worker from "./Sha1Worker?worker";
 import Sha1Wasm from "./wasm/Sha1.wasm?url";
 import Sha1SimdWasm from "./wasm/Sha1Simd.wasm?url";
-import SimdDetection from "./wasm/SimdDetection.wasm?init";
+import SimdDetectionWasm from "./wasm/SimdDetection.wasm?url";
 import { CreateWorkerProxy, TransferTypedArray } from "./RemoteWorkerProxy";
 import type { RemoteProxy } from "./RemoteProxy";
 
@@ -53,11 +53,34 @@ function createWorkerPool(workers: WorkerObject[]) {
     };
 }
 
+declare var workerScriptSource: string | undefined; // Value will be set by the build script if needed
+let workerScriptBlobUrl: string | null = null;
+if (import.meta.env.MODE === "singlefile" && typeof workerScriptSource !== "undefined") {
+    const blob = new Blob([workerScriptSource], { type: "text/javascript" });
+    workerScriptBlobUrl = URL.createObjectURL(blob);
+}
+
+function createWorker(): Worker {
+    if (import.meta.env.MODE === "singlefile") {
+        // Must use import.meta.env.MODE, so the bundler can remove unreachable code
+        // (which would use import.meta.url during runtime, which is not available in single file mode)
+
+        if (workerScriptBlobUrl === null) {
+            // Shouldn't happen
+            throw Error("Worker script url is missing");
+        }
+
+        return new Worker(workerScriptBlobUrl, { name: "Sha-1 worker" });
+    } else {
+        return new Sha1Worker();
+    }
+}
+
 async function initializeWorkers() {
     let simdSupported = true;
     try {
         // https://github.com/GoogleChromeLabs/wasm-feature-detect/blob/main/src/detectors/simd/module.wat
-        await SimdDetection();
+        await WebAssembly.instantiateStreaming(fetch(SimdDetectionWasm));
     } catch {
         simdSupported = false;
     }
@@ -68,7 +91,7 @@ async function initializeWorkers() {
     const workers: WorkerObject[] = [];
 
     for (let i = 0; i < maxWorkerCount; ++i) {
-        const worker = new Sha1Worker();
+        const worker = createWorker();
         const proxy = CreateWorkerProxy<Sha1WorkerObject, Uint8Array>(worker, sha1WasmBytes);
         workers.push(proxy);
     }
