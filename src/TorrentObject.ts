@@ -44,13 +44,7 @@ export function validateTorrentInput(torrentUIParameters: TorrentUIParameters): 
 
     for (const tracker of getLines(torrentUIParameters.trackers)) {
         try {
-            const url = new URL(tracker);
-
-            if (!/\/announce\/?$/.test(url.pathname)) {
-                return Result.error(
-                    `Invalid tracker: \`${tracker}\` (URL must end with \`announce\` or \`announce/\`)`,
-                );
-            }
+            new URL(tracker);
         } catch {
             return Result.error(`Invalid tracker: \`${tracker}\` (not a valid URL)`);
         }
@@ -259,11 +253,6 @@ The file might be inaccessible, or might have been modified, moved, or deleted`,
                 let readResult: ReadableStreamReadResult<Uint8Array<ArrayBuffer>>;
 
                 try {
-                    // @ts-expect-error
-                    // https://developer.mozilla.org/en-US/docs/Web/API/ReadableStreamBYOBReader/read
-                    // An optional `min` parameter is available in new browsers, which requests at least N bytes to be read
-                    // But since this is very new, the type definitions are not updated yet
-                    // Once they are updated, this comment can be removed
                     readResult = await reader.read(new Uint8Array(byobBuffer), { min: readBufferSize });
                 } catch (_ex) {
                     return getError();

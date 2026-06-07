@@ -2,7 +2,7 @@
     "compilerOptions": {
         "target": "es2022",
         "module": "es2022",
-        "moduleResolution": "Node",
+        "moduleResolution": "bundler",
         "rootDir": "./src/",
         "allowJs": true,
         "checkJs": false,
@@ -20,7 +20,6 @@
         "skipLibCheck": true,
         "verbatimModuleSyntax": true,
         "resolveJsonModule": true,
-        "baseUrl": ".",
         "types": ["vite/client"]
     },
     "include": ["src/**/*"]
