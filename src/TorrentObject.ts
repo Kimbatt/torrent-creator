@@ -1,8 +1,8 @@
 import { BencodeBuffer, BencodeDict } from "./Bencode";
 import { InputType, type FileWithPath, type SelectedFileOrFolderInfo } from "./FileInput";
 import { workerPoolPromise } from "./Sha1";
-import { BlockSize, type TorrentUIParameters } from "./UIState";
-import { getLines, KB, MB, Result } from "./Util";
+import type { TorrentUIParameters } from "./UIState";
+import { fileSizeBias, getLines, MB, Result } from "./Util";
 
 export type TorrentFileInfo = {
     length: number;
@@ -193,43 +193,51 @@ export async function calculateHashes(
         allWorkerPromises.push(calculateHashes());
     }
 
-    // Read 16MB chunks, even for lower block sizes
-    const readBufferSize = 16 * MB;
-    const readAccumulatorBuffer = new Uint8Array(readBufferSize);
-    let readBufferIndex = 0;
+    // Read fixed size chunks, even for smaller/larger block sizes
+    const readBufferSize = 4 * MB;
 
-    function onFileChunkRead(resultBytes: Uint8Array) {
+    // All data that is being read is placed into a single buffer, which will be hashed when
+    // the buffer reaches the target block size (and after all files are read)
+    const readAccumulatorBuffer = new Uint8Array(Math.max(readBufferSize, blockSize));
+    let readAccumulatorBufferIndex = 0;
+
+    function onFileChunkRead(resultBytes: Uint8Array, biasedSizeMultiplier: number) {
         if (isCancelled()) {
             return;
         }
 
-        updateReadingProgress(resultBytes.length);
+        updateReadingProgress(resultBytes.length * biasedSizeMultiplier);
 
-        if (readBufferIndex + resultBytes.length >= readBufferSize) {
-            // Block is full
-            const remainingSize = readBufferSize - readBufferIndex;
+        if (readAccumulatorBufferIndex + resultBytes.length >= readAccumulatorBuffer.length) {
+            // Accumulator buffer is full
+            const remainingSize = readAccumulatorBuffer.length - readAccumulatorBufferIndex;
 
-            readAccumulatorBuffer.set(resultBytes.subarray(0, remainingSize), readBufferIndex);
+            readAccumulatorBuffer.set(resultBytes.subarray(0, remainingSize), readAccumulatorBufferIndex);
             resultBytes = resultBytes.subarray(remainingSize);
 
             // Send to worker (no await here, all work will be awaited at the end)
             dispatchSha1Worker(readAccumulatorBuffer);
 
-            readBufferIndex = 0;
+            readAccumulatorBufferIndex = 0;
         }
 
         // The rest of the file fits into the read buffer
-        readAccumulatorBuffer.set(resultBytes, readBufferIndex);
-        readBufferIndex += resultBytes.length;
+        readAccumulatorBuffer.set(resultBytes, readAccumulatorBufferIndex);
+        readAccumulatorBufferIndex += resultBytes.length;
     }
 
     const hasBYOB = File.prototype.stream !== undefined && typeof ReadableStreamBYOBReader !== undefined;
+    let byobBuffer: ArrayBuffer | null = null;
 
     for (const { path, file } of inputFiles) {
         if (file.size === 0) {
             // Files with 0 size don't contribute to the final hash
+
+            updateReadingProgress(fileSizeBias);
             continue;
         }
+
+        const biasedSizeMultiplier = (file.size + fileSizeBias) / file.size;
 
         const filePath = path.join("/");
         onReadingFileStarted(filePath);
@@ -244,32 +252,40 @@ The file might be inaccessible, or might have been modified, moved, or deleted`,
         if (hasBYOB) {
             // Faster, stream-based version
 
-            let byobBuffer = new ArrayBuffer(readBufferSize);
-
             const stream = file.stream();
             const reader = stream.getReader({ mode: "byob" });
 
-            while (true) {
-                let readResult: ReadableStreamReadResult<Uint8Array<ArrayBuffer>>;
+            try {
+                while (true) {
+                    // Create the byob buffer only once per torrent - this improves performance when reading many small files
+                    byobBuffer ??= new ArrayBuffer(readBufferSize);
 
-                try {
-                    readResult = await reader.read(new Uint8Array(byobBuffer), { min: readBufferSize });
-                } catch (_ex) {
-                    return getError();
-                }
+                    let readResult: ReadableStreamReadResult<Uint8Array<ArrayBuffer>>;
+                    try {
+                        const view: Uint8Array<ArrayBuffer> = new Uint8Array(byobBuffer);
+                        byobBuffer = null;
 
-                if (isCancelled()) {
-                    return Result.error(null);
-                }
+                        readResult = await reader.read(view, { min: view.length });
+                    } catch (ex) {
+                        console.error(ex);
+                        return getError();
+                    }
 
-                if (readResult.value !== undefined) {
-                    byobBuffer = readResult.value.buffer;
-                    onFileChunkRead(readResult.value);
-                }
+                    if (isCancelled()) {
+                        return Result.error(null);
+                    }
 
-                if (readResult.done) {
-                    break;
+                    if (readResult.value !== undefined) {
+                        byobBuffer = readResult.value.buffer;
+                        onFileChunkRead(readResult.value, biasedSizeMultiplier);
+                    }
+
+                    if (readResult.done) {
+                        break;
+                    }
                 }
+            } finally {
+                reader.releaseLock();
             }
         } else {
             // "Slower" version, each chunk is allocated separately
@@ -285,7 +301,7 @@ The file might be inaccessible, or might have been modified, moved, or deleted`,
                     return;
                 }
 
-                onFileChunkRead(new Uint8Array(result));
+                onFileChunkRead(new Uint8Array(result), biasedSizeMultiplier);
                 resolver();
             };
 
@@ -302,7 +318,8 @@ The file might be inaccessible, or might have been modified, moved, or deleted`,
                         onError = reject;
                         reader.readAsArrayBuffer(file.slice(startIndex, endIndex));
                     });
-                } catch (_ex) {
+                } catch (ex) {
+                    console.error(ex);
                     return getError();
                 }
 
@@ -314,8 +331,8 @@ The file might be inaccessible, or might have been modified, moved, or deleted`,
     }
 
     // All files read, calculate hash of the remaining bytes
-    if (readBufferIndex !== 0) {
-        dispatchSha1Worker(readAccumulatorBuffer.subarray(0, readBufferIndex));
+    if (readAccumulatorBufferIndex !== 0) {
+        dispatchSha1Worker(readAccumulatorBuffer.subarray(0, readAccumulatorBufferIndex));
     }
 
     if (isCancelled()) {
@@ -343,41 +360,4 @@ export async function calculateInfoHash(infoObject: TorrentInfo) {
     }
 
     return [...hashResult.result].map(byte => byte.toString(16).padStart(2, "0")).join("");
-}
-
-export function getAutoBlockSize(totalSize: number) {
-    const targetBlockCount = 1200;
-    let factor = Math.round(Math.log2(totalSize / targetBlockCount));
-    factor = Math.max(factor, 14); // 2^14 = 16 kb (minimum block size)
-    factor = Math.min(factor, 24); // 2^24 = 16 mb (maximum block size)
-    return 1 << factor;
-}
-
-export function getBlockSize(blockSize: BlockSize, totalSize: number): number {
-    switch (blockSize) {
-        case BlockSize.Auto:
-            return getAutoBlockSize(totalSize);
-        case BlockSize.KB16:
-            return 16 * KB;
-        case BlockSize.KB32:
-            return 32 * KB;
-        case BlockSize.KB64:
-            return 64 * KB;
-        case BlockSize.KB128:
-            return 128 * KB;
-        case BlockSize.KB256:
-            return 256 * KB;
-        case BlockSize.KB512:
-            return 512 * KB;
-        case BlockSize.MB1:
-            return 1 * MB;
-        case BlockSize.MB2:
-            return 2 * MB;
-        case BlockSize.MB4:
-            return 4 * MB;
-        case BlockSize.MB8:
-            return 8 * MB;
-        case BlockSize.MB16:
-            return 16 * MB;
-    }
 }

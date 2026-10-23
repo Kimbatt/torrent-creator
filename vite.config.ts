@@ -1,15 +1,50 @@
 import { svelte } from "@sveltejs/vite-plugin-svelte";
-import { type PluginOption, defineConfig } from "vite";
 import { JSDOM } from "jsdom";
+import { type PluginOption, defineConfig } from "vite";
+
+let workerFileSource: string | null = null; // Since Vite 8, workers are bundled separately, so the generated code must be stored outside the plugin
+
+const createSingleFileWorkerPlugin: PluginOption = {
+    name: "create-single-file-worker",
+    enforce: "post",
+
+    generateBundle: (_, bundle) => {
+        let workerFileName: string | null = null;
+
+        for (const fileName in bundle) {
+            if (fileName.endsWith(".js")) {
+                if (workerFileName !== null) {
+                    throw Error("Expected only one worker script file");
+                }
+                workerFileName = fileName;
+            }
+        }
+
+        if (workerFileName === null) {
+            throw Error("Expected to have a worker script file");
+        }
+
+        const workerFile = bundle[workerFileName];
+
+        if (workerFile.type !== "chunk") {
+            throw Error("Unexpected bundled type");
+        }
+
+        workerFileSource = workerFile.code;
+    },
+};
 
 const createSingleFilePlugin: PluginOption = {
     name: "create-single-file",
     enforce: "post",
     generateBundle: (_, bundle) => {
+        if (workerFileSource === null) {
+            throw Error("Expected the worker source to be generated before the main bundle");
+        }
+
         let htmlFileName: string | null = null;
         let scriptFileName: string | null = null;
         let cssFileName: string | null = null;
-        let workerFileName: string | null = null;
 
         const imageExtensions = [".png", ".svg", ".ico"] as const;
         type ImageExtensionName = (typeof imageExtensions)[number];
@@ -24,17 +59,10 @@ const createSingleFilePlugin: PluginOption = {
             }
 
             if (fileName.endsWith(".js")) {
-                if (bundle[fileName].type === "asset") {
-                    if (workerFileName !== null) {
-                        throw Error("Expected only one worker script file");
-                    }
-                    workerFileName = fileName;
-                } else {
-                    if (scriptFileName !== null) {
-                        throw Error("Expected only one script file");
-                    }
-                    scriptFileName = fileName;
+                if (scriptFileName !== null) {
+                    throw Error("Expected only one script file");
                 }
+                scriptFileName = fileName;
             }
 
             if (fileName.endsWith(".css")) {
@@ -61,24 +89,15 @@ const createSingleFilePlugin: PluginOption = {
         if (cssFileName === null) {
             throw Error("Expected to have a css file");
         }
-        if (workerFileName === null) {
-            throw Error("Expected to have a worker script file");
-        }
 
         const htmlFile = bundle[htmlFileName];
         const scriptFile = bundle[scriptFileName];
         const cssFile = bundle[cssFileName];
-        const workerFile = bundle[workerFileName];
-        if (
-            htmlFile.type !== "asset" ||
-            scriptFile.type !== "chunk" ||
-            cssFile.type !== "asset" ||
-            workerFile.type !== "asset"
-        ) {
+        if (htmlFile.type !== "asset" || scriptFile.type !== "chunk" || cssFile.type !== "asset") {
             throw Error("Unexpected bundled type");
         }
 
-        if (typeof cssFile.source !== "string" || typeof workerFile.source !== "string") {
+        if (typeof cssFile.source !== "string") {
             throw Error("Expected file source to be a string");
         }
 
@@ -97,7 +116,7 @@ const createSingleFilePlugin: PluginOption = {
             const newScript = doc.createElement("script");
 
             // This variable name is used in the code
-            const workerScriptDeclaration = `var workerScriptSource = ${JSON.stringify(workerFile.source)};\n`;
+            const workerScriptDeclaration = `var workerScriptSource = ${JSON.stringify(workerFileSource)};\n`;
 
             newScript.textContent = workerScriptDeclaration + scriptFile.code;
 
@@ -105,7 +124,6 @@ const createSingleFilePlugin: PluginOption = {
             doc.body.appendChild(newScript);
 
             delete bundle[scriptFileName];
-            delete bundle[workerFileName];
         }
 
         // Inline css
@@ -190,9 +208,12 @@ export default defineConfig(env => {
             cssCodeSplit: false,
             rollupOptions: {
                 output: {
-                    inlineDynamicImports: true,
+                    codeSplitting: false,
                 },
             },
+        },
+        worker: {
+            plugins: () => [createSingleFile ? createSingleFileWorkerPlugin : null],
         },
     };
 });

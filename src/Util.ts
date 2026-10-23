@@ -9,15 +9,20 @@ export function GetSizeStr(size: number) {
     }
 
     if (size < MB) {
-        return ((size / KB) | 0) + " kB";
+        return ((size / KB) | 0) + " KiB";
     }
 
     if (size < GB) {
-        return ((size / MB) | 0) + " MB";
+        return ((size / MB) | 0) + " MiB";
     }
 
-    return (size / GB).toFixed(2) + " GB";
+    return (size / GB).toFixed(2) + " GiB";
 }
+
+// For each file, increase their progress contribution by a constant amount, regardless of their size
+// Reading many small files is slower than reading one large file, even if their total size is the same
+// This bias is just an arbitrary value that makes the progress more smooth (by making smaller files take up more of the total progress)
+export const fileSizeBias = 16 * MB;
 
 export function getLines(str: string) {
     return str.split(/\s+/g).filter(line => line.length !== 0);

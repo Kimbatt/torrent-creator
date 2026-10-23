@@ -1,21 +1,21 @@
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { onMount, untrack } from "svelte";
+
     import GithubIcon from "./assets/github.svg";
-    import { formatTextAreaLines, getLines, GetSizeStr, KB, MB, resizeTextArea, Track } from "./Util";
     import { BencodeBuffer, BencodeDict } from "./Bencode";
+    import { BlockSize, getAutoBlockSize, getBlockSize, nonAutoBlockSizes } from "./BlockSize";
+    import CustomCheckbox from "./CustomCheckbox.svelte";
     import { InputType, loadFileOrFolder, type SelectedFileOrFolderInfo } from "./FileInput";
+    import { workerPoolPromise } from "./Sha1";
     import {
         assembleTorrentObject,
         calculateHashes,
         calculateInfoHash,
-        getAutoBlockSize,
-        getBlockSize,
         validateTorrentInput,
         type TorrentInfo,
     } from "./TorrentObject";
-    import { BlockSize, type TorrentUIParameters } from "./UIState";
-    import { workerPoolPromise } from "./Sha1";
-    import CustomCheckbox from "./CustomCheckbox.svelte";
+    import type { TorrentUIParameters } from "./UIState";
+    import { fileSizeBias, formatTextAreaLines, getLines, GetSizeStr, resizeTextArea, Track } from "./Util";
 
     const TorrentCreationState = {
         NotStarted: 0,
@@ -89,7 +89,7 @@
 
     let canCreateTorrent = $derived(selectedFileOrFolderInfo !== null);
 
-    let lastValidInfoObject: TorrentInfo | null = $state(null);
+    let lastValidInfoObject: TorrentInfo | null = $state.raw(null);
     let lastInfoHashCalculationIndex = 0;
     async function updateInfoHash() {
         const index = ++lastInfoHashCalculationIndex;
@@ -115,7 +115,7 @@
             lastValidInfoObject.source = torrentUIParameters.source === "" ? undefined : torrentUIParameters.source;
         }
 
-        updateInfoHash();
+        untrack(updateInfoHash);
     });
 
     let pieces: Uint8Array | null = null;
@@ -212,13 +212,15 @@
             let totalBytesRead = 0;
             let totalBytesProcessed = 0;
 
+            const biasedTotalSize = totalSize + fileSizeBias * selectedFileOrFolderInfo.fileList.length;
+            const invBiasedTotalSize = 1 / biasedTotalSize;
             const invTotalSize = 1 / totalSize;
             const updateProgress = () => {
                 if (isCancelled()) {
                     return;
                 }
 
-                const readingProgress = totalBytesRead * invTotalSize;
+                const readingProgress = totalBytesRead * invBiasedTotalSize;
                 const processingProgress = totalBytesProcessed * invTotalSize;
                 progressPercentage = (readingProgress + processingProgress) * 0.5;
             };
@@ -387,17 +389,10 @@
                 <option value={BlockSize.Auto}>
                     Automatic{autoCalculatedBlockSizeText === null ? "" : ` (${autoCalculatedBlockSizeText})`}
                 </option>
-                <option value={BlockSize.KB16}>{GetSizeStr(16 * KB)}</option>
-                <option value={BlockSize.KB32}>{GetSizeStr(32 * KB)}</option>
-                <option value={BlockSize.KB64}>{GetSizeStr(64 * KB)}</option>
-                <option value={BlockSize.KB128}>{GetSizeStr(128 * KB)}</option>
-                <option value={BlockSize.KB256}>{GetSizeStr(256 * KB)}</option>
-                <option value={BlockSize.KB512}>{GetSizeStr(512 * KB)}</option>
-                <option value={BlockSize.MB1}>{GetSizeStr(1 * MB)}</option>
-                <option value={BlockSize.MB2}>{GetSizeStr(2 * MB)}</option>
-                <option value={BlockSize.MB4}>{GetSizeStr(4 * MB)}</option>
-                <option value={BlockSize.MB8}>{GetSizeStr(8 * MB)}</option>
-                <option value={BlockSize.MB16}>{GetSizeStr(16 * MB)}</option>
+
+                {#each nonAutoBlockSizes as blockSize}
+                    <option value={blockSize}>{GetSizeStr(getBlockSize(blockSize, 0))}</option>
+                {/each}
             </select>
         </label>
 
@@ -412,6 +407,12 @@
             text="Set creation date"
             disabled={disableInputs}
         />
+
+        {#if torrentUIParameters.blockSize > BlockSize.MB16}
+            <div class="notification">
+                Piece sizes larger than 16 MiB might not be supported by all torrent clients.
+            </div>
+        {/if}
     </div>
 
     <div style="position: relative; display: flex;">
@@ -422,8 +423,7 @@
             disabled={disableInputs}
             bind:this={trackersTextArea}
             bind:value={torrentUIParameters.trackers}
-            onchange={() => formatTextAreaLines(trackersTextArea, false)}
-        ></textarea>
+            onchange={() => formatTextAreaLines(trackersTextArea, false)}></textarea>
 
         <button
             class="add-trackers-button"
@@ -475,8 +475,7 @@
         bind:this={webSeedsTextArea}
         bind:value={torrentUIParameters.webSeeds}
         oninput={() => resizeTextArea(webSeedsTextArea)}
-        onchange={() => formatTextAreaLines(webSeedsTextArea)}
-    ></textarea>
+        onchange={() => formatTextAreaLines(webSeedsTextArea)}></textarea>
 
     <textarea
         class="input-fullwidth"
@@ -485,8 +484,7 @@
         disabled={disableInputs}
         bind:this={commentTextArea}
         bind:value={torrentUIParameters.comment}
-        oninput={() => resizeTextArea(commentTextArea)}
-    ></textarea>
+        oninput={() => resizeTextArea(commentTextArea)}></textarea>
 
     <input
         type="text"
@@ -606,14 +604,11 @@
         padding: 10px;
         resize: none;
         white-space: nowrap;
-
-        &::placeholder {
-            color: c.$color-placeholder;
-            font-style: italic;
-        }
     }
 
-    input[type="text"]::placeholder {
+    .notification,
+    input[type="text"]::placeholder,
+    textarea::placeholder {
         color: c.$color-placeholder;
         font-style: italic;
     }

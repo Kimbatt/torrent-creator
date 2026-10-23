@@ -1,10 +1,10 @@
+import type { RemoteProxy } from "./RemoteProxy";
+import { CreateWorkerProxy, TransferTypedArray } from "./RemoteWorkerProxy";
 import type { Sha1WorkerObject } from "./Sha1Worker";
 import Sha1Worker from "./Sha1Worker?worker";
 import Sha1Wasm from "./wasm/Sha1.wasm?url";
 import Sha1SimdWasm from "./wasm/Sha1Simd.wasm?url";
 import SimdDetectionWasm from "./wasm/SimdDetection.wasm?url";
-import { CreateWorkerProxy, TransferTypedArray } from "./RemoteWorkerProxy";
-import type { RemoteProxy } from "./RemoteProxy";
 
 // Use 8 workers max, reading from disk will be the slowest anyways
 const maxWorkerCount = Math.min(navigator.hardwareConcurrency || 1, 8);

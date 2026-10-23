@@ -1,4 +1,4 @@
-#ifdef EMSCRIPTEN
+#ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
 
@@ -6,68 +6,113 @@
 #define EMSCRIPTEN_KEEPALIVE
 #endif
 
-using _size_t = unsigned int; // 4-bytes in webassembly
-using _uint64_t = unsigned long long;
-using _uint8_t = unsigned char;
-using _uint32_t = unsigned int;
-using _int32_t = int;
+using usize = unsigned int; // 4-bytes in webassembly
+using u64 = unsigned long long;
+using u8 = unsigned char;
+using u32 = unsigned int;
+using i32 = int;
 
-// The max block size for a torrent is 16MB, and the sha-1 hash can add an extra 64-byte block at the end
-static constexpr _size_t maxBufferSize = 16 * 1024 * 1024 + 64;
-static _uint8_t memoryBuffer[maxBufferSize];
-static _uint8_t resultBuffer[20];
+// The max chunk size is 1MB, and the sha-1 hash can add an extra 64-byte block at the end
+static constexpr usize maxBufferSize = 1 * 1024 * 1024 + 64;
+static u8 memoryBuffer[maxBufferSize]; // Hash input should be written here
+static u8 resultBuffer[20];
 
-extern "C" EMSCRIPTEN_KEEPALIVE _uint8_t* getMemoryBuffer()
+extern "C" EMSCRIPTEN_KEEPALIVE u8* getMemoryBuffer()
 {
     return memoryBuffer;
 }
 
-extern "C" EMSCRIPTEN_KEEPALIVE const _uint8_t* sha1(_size_t sizeInBytes)
+struct HasherState
 {
-    // https://en.wikipedia.org/wiki/SHA-1#SHA-1_pseudocode
+    // Sha-1 internal state
+    u32 h0{ };
+    u32 h1{ };
+    u32 h2{ };
+    u32 h3{ };
+    u32 h4{ };
 
-    _uint64_t ml = (_uint64_t)sizeInBytes * 8; // Message length in bits
+    u64 ml{ }; // Message length in bits
 
-    _size_t writeIndex = sizeInBytes;
+    usize totalSizeInBytes{ };
+    usize processedNumBytes{ };
+};
 
-    // Append the bit '1' to the message
-    memoryBuffer[writeIndex++] = 0x80;
+// To allow large chunks of data to be hashed, the hash process is split into multiple parts, and the state is kept between the calls
+static HasherState state{ };
 
-    // Append 0 <= k < 512 bits '0', such that the resulting message length in bits is congruent to 448 (mod 512)
-    // Which is 0 <= k < 64 bytes, and is congruent to 56 mod 64
-    while ((writeIndex & 63) != 56)
+// https://en.wikipedia.org/wiki/SHA-1#SHA-1_pseudocode
+
+extern "C" EMSCRIPTEN_KEEPALIVE void sha1Initialize(usize totalDataSizeInBytes)
+{
+    state = HasherState
     {
-        memoryBuffer[writeIndex++] = 0;
-    }
+        // Sha-1 initial constants
+        .h0 = 0x67452301,
+        .h1 = 0xEFCDAB89,
+        .h2 = 0x98BADCFE,
+        .h3 = 0x10325476,
+        .h4 = 0xC3D2E1F0,
 
-    // Append ml, the original message length in bits, as a 64-bit big-endian integer
-    for (_size_t i = 0; i < 8; ++i)
+        .ml = (u64)totalDataSizeInBytes * 8,
+
+        .totalSizeInBytes = totalDataSizeInBytes,
+        .processedNumBytes = 0,
+    };
+}
+
+extern "C" EMSCRIPTEN_KEEPALIVE void sha1ProcessChunk(usize currentDataSizeInBytes)
+{
+    // The data size per block must not be larger than 16MB, and must be a multiple of 64 bytes (except for the last chunk)
+
+    usize writeIndex = currentDataSizeInBytes;
+
+    bool isLastBlock = (state.processedNumBytes + currentDataSizeInBytes) == state.totalSizeInBytes;
+    if (isLastBlock)
     {
-        _size_t shift = (7 - i) * 8;
-        memoryBuffer[writeIndex++] = (_uint8_t)((ml >> shift) & 0xff);
+        // For the last block, add extra bytes required by sha-1
+        // We always have at least 64 free bytes at the end
+
+        // Append the bit '1' to the message
+        memoryBuffer[writeIndex++] = 0x80;
+
+        // Append 0 <= k < 512 bits '0', such that the resulting message length in bits is congruent to 448 (mod 512)
+        // Which is 0 <= k < 64 bytes, and is congruent to 56 mod 64
+        while ((writeIndex & 63) != 56)
+        {
+            memoryBuffer[writeIndex++] = 0;
+        }
+
+        // Append ml, the original message length in bits, as a 64-bit big-endian integer
+        for (usize i = 0; i < 8; ++i)
+        {
+            usize shift = (7 - i) * 8;
+            memoryBuffer[writeIndex++] = (u8)((state.ml >> shift) & 0xff);
+        }
     }
 
     // Process the message in successive 512-bit chunks
 
-    _uint32_t h0 = 0x67452301;
-    _uint32_t h1 = 0xEFCDAB89;
-    _uint32_t h2 = 0x98BADCFE;
-    _uint32_t h3 = 0x10325476;
-    _uint32_t h4 = 0xC3D2E1F0;
+    // If any state is available from previous chunks, reuse them
+    u32& h0 = state.h0;
+    u32& h1 = state.h1;
+    u32& h2 = state.h2;
+    u32& h3 = state.h3;
+    u32& h4 = state.h4;
 
-    _uint32_t w[80];
-    for (_size_t i = 0; i < writeIndex;)
+    u32 w[80]; // Data is overwritten in each loop, no need to initialize this
+
+    for (usize i = 0; i < writeIndex;)
     {
         // Break chunk into sixteen 32-bit big-endian words w[j], 0 <= j < 16
 
-#define CHUNK_UNROLL(j)                                         \
-        do                                                      \
-        {                                                       \
-            _uint32_t b0 = (_uint32_t)memoryBuffer[i++];        \
-            _uint32_t b1 = (_uint32_t)memoryBuffer[i++];        \
-            _uint32_t b2 = (_uint32_t)memoryBuffer[i++];        \
-            _uint32_t b3 = (_uint32_t)memoryBuffer[i++];        \
-            w[j] = (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;    \
+#define CHUNK_UNROLL(j)                                      \
+        do                                                   \
+        {                                                    \
+            u32 b0 = (u32)memoryBuffer[i++];                 \
+            u32 b1 = (u32)memoryBuffer[i++];                 \
+            u32 b2 = (u32)memoryBuffer[i++];                 \
+            u32 b3 = (u32)memoryBuffer[i++];                 \
+            w[j] = (b0 << 24) | (b1 << 16) | (b2 << 8) | b3; \
         } while(0)
 
         CHUNK_UNROLL(0);
@@ -89,11 +134,11 @@ extern "C" EMSCRIPTEN_KEEPALIVE const _uint8_t* sha1(_size_t sizeInBytes)
 
         // Message schedule: extend the sixteen 32-bit words into eighty 32-bit words
 
-#define MESSAGE_SCHEDULE(j)                                             \
-        do                                                              \
-        {                                                               \
-            _uint32_t n = w[j - 3] ^ w[j - 8] ^ w[j - 14] ^ w[j - 16];  \
-            w[j] = (n << 1) | (n >> 31);                                \
+#define MESSAGE_SCHEDULE(j)                                      \
+        do                                                       \
+        {                                                        \
+            u32 n = w[j - 3] ^ w[j - 8] ^ w[j - 14] ^ w[j - 16]; \
+            w[j] = (n << 1) | (n >> 31);                         \
         } while(0)
 
         MESSAGE_SCHEDULE(16);
@@ -162,11 +207,11 @@ extern "C" EMSCRIPTEN_KEEPALIVE const _uint8_t* sha1(_size_t sizeInBytes)
         MESSAGE_SCHEDULE(79);
 
         // Initialize hash value for this chunk
-        _uint32_t a = h0;
-        _uint32_t b = h1;
-        _uint32_t c = h2;
-        _uint32_t d = h3;
-        _uint32_t e = h4;
+        u32 a = h0;
+        u32 b = h1;
+        u32 c = h2;
+        u32 d = h3;
+        u32 e = h4;
 
         // Main loop
 
@@ -180,28 +225,28 @@ extern "C" EMSCRIPTEN_KEEPALIVE const _uint8_t* sha1(_size_t sizeInBytes)
 #define MAIN_LOOP_0_20(j)                                                                                                   \
         do                                                                                                                  \
         {                                                                                                                   \
-            _uint32_t temp = (((a << 5) | (a >> 27)) + ((b & c) | (~b & d)) + e + w[j] + 0x5A827999) & 0x0ffffffff;         \
+            u32 temp = (((a << 5) | (a >> 27)) + ((b & c) | (~b & d)) + e + w[j] + 0x5A827999) & 0x0ffffffff;               \
             MAIN_LOOP_AFTER                                                                                                 \
         } while(0)
 
 #define MAIN_LOOP_20_40(j)                                                                                                  \
         do                                                                                                                  \
         {                                                                                                                   \
-            _uint32_t temp = (((a << 5) | (a >> 27)) + (b ^ c ^ d) + e + w[j] + 0x6ED9EBA1) & 0x0ffffffff;                  \
+            u32 temp = (((a << 5) | (a >> 27)) + (b ^ c ^ d) + e + w[j] + 0x6ED9EBA1) & 0x0ffffffff;                        \
             MAIN_LOOP_AFTER                                                                                                 \
         } while(0)
 
 #define MAIN_LOOP_40_60(j)                                                                                                  \
         do                                                                                                                  \
         {                                                                                                                   \
-            _uint32_t temp = (((a << 5) | (a >> 27)) + ((b & c) | (b & d) | (c & d)) + e + w[j] + 0x8F1BBCDC) & 0x0ffffffff;\
+            u32 temp = (((a << 5) | (a >> 27)) + ((b & c) | (b & d) | (c & d)) + e + w[j] + 0x8F1BBCDC) & 0x0ffffffff;      \
             MAIN_LOOP_AFTER                                                                                                 \
         } while(0)
 
 #define MAIN_LOOP_60_80(j)                                                                                                  \
         do                                                                                                                  \
         {                                                                                                                   \
-            _uint32_t temp = (((a << 5) | (a >> 27)) + (b ^ c ^ d) + e + w[j] + 0xCA62C1D6) & 0x0ffffffff;                  \
+            u32 temp = (((a << 5) | (a >> 27)) + (b ^ c ^ d) + e + w[j] + 0xCA62C1D6) & 0x0ffffffff;                        \
             MAIN_LOOP_AFTER                                                                                                 \
         } while(0)
 
@@ -297,7 +342,12 @@ extern "C" EMSCRIPTEN_KEEPALIVE const _uint8_t* sha1(_size_t sizeInBytes)
         h4 += e;
     }
 
-    _size_t resultWriteIndex = 0;
+    state.processedNumBytes += currentDataSizeInBytes;
+}
+
+extern "C" EMSCRIPTEN_KEEPALIVE const u8* sha1Finalize()
+{
+    usize resultWriteIndex = 0;
 
 #define WRITE_RESULT_BE(h)                                      \
     do                                                          \
@@ -308,11 +358,11 @@ extern "C" EMSCRIPTEN_KEEPALIVE const _uint8_t* sha1(_size_t sizeInBytes)
         resultBuffer[resultWriteIndex++] = h & 0xff;            \
     } while(0)
 
-    WRITE_RESULT_BE(h0);
-    WRITE_RESULT_BE(h1);
-    WRITE_RESULT_BE(h2);
-    WRITE_RESULT_BE(h3);
-    WRITE_RESULT_BE(h4);
+    WRITE_RESULT_BE(state.h0);
+    WRITE_RESULT_BE(state.h1);
+    WRITE_RESULT_BE(state.h2);
+    WRITE_RESULT_BE(state.h3);
+    WRITE_RESULT_BE(state.h4);
 
     return resultBuffer;
 }

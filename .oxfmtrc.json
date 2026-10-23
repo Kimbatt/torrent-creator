@@ -1,0 +1,10 @@
+{
+    "arrowParens": "avoid",
+    "endOfLine": "crlf",
+    "printWidth": 120,
+    "singleAttributePerLine": true,
+    "tabWidth": 4,
+
+    "svelte": true,
+    "sortImports": true
+}

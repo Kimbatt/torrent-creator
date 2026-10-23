@@ -3,10 +3,14 @@ import { SetWorkerObject, TransferTypedArray } from "./RemoteWorkerProxy";
 type Ptr = number;
 type WasmModule = WebAssembly.Exports & {
     getMemoryBuffer: () => Ptr;
-    sha1: (sizeInBytes: number) => Ptr;
+    sha1Initialize: (totalDataSizeInBytes: number) => void;
+    sha1ProcessChunk: (currentDataSizeInBytes: number) => void;
+    sha1Finalize: () => Ptr;
     _initialize: () => void;
     memory: WebAssembly.Memory;
 };
+
+const maxChunkSize = 1 * 1024 * 1024; // Limit is set in the webassembly module
 
 export class Sha1WorkerObject {
     private module: WasmModule;
@@ -27,9 +31,22 @@ export class Sha1WorkerObject {
         const result = new Uint8Array(inputs.length * hashResultSize);
         for (let i = 0; i < inputs.length; ++i) {
             const bytes = inputs[i];
-            this.HEAPU8.set(bytes, ptr);
 
-            const resultPtr = this.module.sha1(bytes.length);
+            this.module.sha1Initialize(bytes.length);
+
+            const numChunks = Math.ceil(bytes.length / maxChunkSize);
+
+            let chunkStart = 0;
+            for (let j = 0; j < numChunks; ++j) {
+                const currentChunkSize = Math.min(maxChunkSize, bytes.length - chunkStart);
+                const chunkEnd = chunkStart + currentChunkSize;
+
+                this.HEAPU8.set(bytes.subarray(chunkStart, chunkEnd), ptr);
+                this.module.sha1ProcessChunk(currentChunkSize);
+                chunkStart = chunkEnd;
+            }
+
+            const resultPtr = this.module.sha1Finalize();
 
             const offset = i * hashResultSize;
             result.set(this.HEAPU8.subarray(resultPtr, resultPtr + hashResultSize), offset);
